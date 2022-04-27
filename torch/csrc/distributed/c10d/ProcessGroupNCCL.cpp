@@ -476,7 +476,11 @@ void ProcessGroupNCCL::WorkNCCL::synchronizeStreams() {
     (*ncclEndEvents_)[i].block(currentStream);
   }
 
-  non_outputs_stashed_for_allocator_safety_->clear();
+  if (avoidRecordStreams_) {
+    TORCH_INTERNAL_ASSERT(outputs_->size() > 0);
+    TORCH_INTERNAL_ASSERT(non_outputs_stashed_for_allocator_safety_->size() > 0);
+    non_outputs_stashed_for_allocator_safety_->clear();
+  }
 }
 
 // Waiting on the work's corresponding CUDA events
@@ -625,6 +629,7 @@ ProcessGroupNCCL::ProcessGroupNCCL(
       parseEnvVarIntDefault(NCCL_ASYNC_ERROR_HANDLING, 0));
   desyncDebug_ = parseEnvVarFlag(NCCL_DESYNC_DEBUG) ||
       (dist_debug_level_ >= DebugLevel::Detail);
+  avoidRecordStreams_ = parseEnvVarFlag(NCCL_AVOID_RECORD_STREAMS);
 
   if (blockingWait_) {
     if (asyncErrorHandling_ != NoHandling || desyncDebug_) {
@@ -1575,6 +1580,11 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::collective(
   // Store references to outputs to be used by WorkNCCL::result and operator<<.
   work->outputs_ = std::make_shared<std::vector<at::Tensor>>(outputs);
 
+  if (avoidRecordStreams_) {
+    work->non_outputs_stashed_for_allocator_safety_ =
+         std::make_shared<std::vector<at::Tensor>>(inputs);
+  }
+
   at::cuda::OptionalCUDAGuard gpuGuard;
 
   // Start event should only be recorded before the ncclGroupStart()
@@ -1604,8 +1614,10 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::collective(
       // operations where `inputs' and `outputs' are not the same.
       //
       // See [Sync Streams].
-      c10::cuda::CUDACachingAllocator::recordStream(
-          inputs[i].storage().data_ptr(), ncclStream);
+      if (!avoidRecordStreams_) {
+        c10::cuda::CUDACachingAllocator::recordStream(
+            inputs[i].storage().data_ptr(), ncclStream);
+      }
       C10D_NCCL_CHECK(
           fn(inputs[i], outputs[i], ncclComm->getNcclComm(), ncclStream),
           ncclComm->getNcclCommFailureReason());
@@ -1641,6 +1653,7 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::collective(
 
   // Set appropriate work parameters.
   work->blockingWait_ = blockingWait_;
+  work->avoidRecordStreams_ = avoidRecordStreams_;
   work->opTimeout_ = options_->timeout;
   work->store_ = store_;
 
