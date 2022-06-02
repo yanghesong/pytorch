@@ -1676,12 +1676,12 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::pointToPoint(
   // avoidRecordStreams_ note:
   // send, recv, and irecv should be ok with avoidRecordStreams,
   // However, for isend, I don't think the API requires the user
-  // to wait() on the returned handle, so we can't know
-  // when it's safe to release the input back to the allocator.
-  // TODO: warn and fall back to the typical recordStream logic
-  // instead of erroring?
-  TORCH_CHECK(!avoidRecordStreams_,
-      "NCCL_AVOID_RECORD_STREAMS=1 is not compatible with point-to-point "
+  // to wait() on the returned handle, so ProcessGroupNCCL can't know
+  // when it's safe to release the input back to the allocator,
+  // and the present call has no way to know it's not an isend.
+  // Therefore, we warn and fall back to the typical recordStream logic:
+  TORCH_WARN_ONCE(!avoidRecordStreams_,
+      "NCCL_AVOID_RECORD_STREAMS=1 has no effect for point-to-point "
       "collectives.");
 
   const auto devices = getDeviceList(tensors);
@@ -2644,8 +2644,6 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::send(
     int dstRank,
     int /* unused */) {
   check_gpu_tensors_different_devices(tensors);
-  // avoidRecordStreams_ note: Point to point operations are not supported.
-  // See avoidRecordStreams_ note in pointToPoint.
   auto ret = pointToPoint(
       tensors,
       [&](at::Tensor& input,
@@ -2666,8 +2664,6 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::recv(
     int srcRank,
     int /* unused */) {
   check_gpu_tensors_different_devices(tensors);
-  // avoidRecordStreams_ note: Point to point operations are not supported.
-  // See avoidRecordStreams_ note in pointToPoint.
   auto ret = pointToPoint(
       tensors,
       [&](at::Tensor& output,
