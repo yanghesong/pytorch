@@ -445,6 +445,8 @@ class CSE:
     def newvar(self):
         return f"{self.name_prefix}{next(self.iter_buffer_ids)}"
 
+    def var_to_accumulate(self, var, capacity):
+        return var + f"_to_accumulate[{capacity}]"
 
 class CodeGen:
     def __init__(self):

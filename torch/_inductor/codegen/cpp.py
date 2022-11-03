@@ -47,7 +47,9 @@ RTYPE_TO_CPP = {
 
 
 def reduction_init(reduction_type, dtype):
-    if reduction_type in ("sum", "any"):
+    if reduction_type == "sum":
+        return "{0}"
+    if reduction_type == "any":
         return 0
     if reduction_type in {"max", "argmax"}:
         return (
@@ -64,9 +66,11 @@ def reduction_init(reduction_type, dtype):
     raise AssertionError(reduction_type)
 
 
-def reduction_combine(reduction_type, var, next_value):
+def reduction_combine(reduction_type, var, next_value, threads_num=0):
     if reduction_type == "sum":
-        return f"{var} += {next_value}"
+        assert threads_num > 0
+        var_with_id = var.replace(f"{threads_num}", "tid")
+        return f"{var_with_id} += {next_value}"
     if reduction_type == "any":
         return f"{var} = {var} || {next_value}"
     return f"{var} = std::{reduction_type}({var}, {next_value})"
@@ -355,9 +359,13 @@ class CppKernel(Kernel):
 
     def reduction(self, name, dtype, src_dtype, reduction_type, index, value):
         argmax_or_argmin = reduction_type in {"argmax", "argmin"}
+        need_accmulate = reduction_type == "sum"
         tmpvar = self.cse.generate(
             self.loads, f"reduction {name} {cexpr(index)}", write=False
         )
+        if need_accmulate:
+            max_threads = self.num_threads if self.num_threads is not None else torch.get_num_threads()
+            tmpvar_to_accumulate = self.cse.var_to_accumulate(tmpvar, max_threads)
         index = self.rename_indexing(index)
         self.reduction_vars[tmpvar] = reduction_type
         if argmax_or_argmin:
@@ -381,13 +389,33 @@ class CppKernel(Kernel):
             self.reduction_prefix.writeline(
                 f"{DTYPE_TO_CPP[dtype]} {tmpvar} = {reduction_init(reduction_type, dtype)};"
             )
-            self.stores.writeline(
-                None, f"{reduction_combine(reduction_type, tmpvar, value)};"
-            )
+            if need_accmulate:
+                self.reduction_prefix.writeline(
+                    f"{DTYPE_TO_CPP[dtype]} {tmpvar_to_accumulate} = {reduction_init(reduction_type, dtype)};"
+                )
+                if not hasattr(self.stores, 'has_tid' ):
+                    self.stores.writeline(None, f"int tid = omp_get_thread_num();")
+                    setattr(self.stores, 'has_tid', True)
+                self.stores.writeline(
+                    None, f"{reduction_combine(reduction_type, tmpvar_to_accumulate, value, max_threads)};"
+                )
+            else:
+                self.stores.writeline(
+                    None, f"{reduction_combine(reduction_type, tmpvar, value)};"
+                )
 
         if name not in V.graph.removed_buffers:
             var = self.args.output(name)
             member_name = ".index" if argmax_or_argmin else ""
+            if need_accmulate:
+                tmpvar_to_accumulate_with_idx = tmpvar_to_accumulate.replace(f"{max_threads}", "i")
+                self.reduction_suffix.writelines(
+                    None,
+                    [
+                        f"for (int i = 0; i < {max_threads}; i++)",
+                        f"    {tmpvar} += {tmpvar_to_accumulate_with_idx};"
+                    ]
+                )
             self.reduction_suffix.writeline(
                 name, f"{var}[{cexpr(index)}] = {tmpvar}{member_name};"
             )
@@ -670,7 +698,7 @@ class LoopLevel:
     def lines(self):
         if self.reduction_vars:
             reduction = " " + " ".join(
-                f"reduction({RTYPE_TO_CPP[rtype]}:{var})"
+                f"reduction({RTYPE_TO_CPP[rtype]}:{var})" if rtype != "sum" else ""
                 for var, rtype in self.reduction_vars.items()
             )
         else:
