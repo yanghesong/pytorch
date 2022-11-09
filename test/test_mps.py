@@ -7439,7 +7439,7 @@ class TestConsistency(TestCase):
         'gradient': ['f16', 'f32', 'i16'],
         'half': ['f16'],
         'hstack': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'index_select': ['f32', 'i16', 'i32', 'i64'],
+        'index_select': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'int': ['i32'],
         'isclose': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'isfinite': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -7782,7 +7782,6 @@ class TestConsistency(TestCase):
         'std': [torch.float16],
         'stft': [torch.float32], 'var': [torch.float16],
         # + forward when requires_grad=True or running backward
-        'index_select': [torch.float16],
         'nn.functional.embedding': [torch.float32, torch.float16],
         '__rpow__': [torch.int64],
         'masked.std': [torch.int32],
