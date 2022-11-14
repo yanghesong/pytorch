@@ -453,7 +453,7 @@ def run_test(
 
 
     command = (launcher_cmd or []) + executable + argv
-    command = ["python", test_module, "-k", "test_conv1d_vs_scipy_mode_same_cuda_complex64", "--repeat", "150"]
+    command = ["python", f"{test_module}.py", "-k", "test_conv1d_vs_scipy_mode_same_cuda_complex64", "--repeat", "150"]
     print_to_stderr("Executing {} ... [{}]".format(command, datetime.now()))
     ret_code = shell(command, test_directory, env=env)
     return ret_code
