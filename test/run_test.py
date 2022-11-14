@@ -451,16 +451,11 @@ def run_test(
     # in `if __name__ == '__main__': `. So call `python test_*.py` instead.
     argv = [test_module + ".py"] + unittest_args
 
-    os.makedirs(REPO_ROOT / "test" / "test-reports", exist_ok=True)
-    log_fd, log_path = tempfile.mkstemp(dir=REPO_ROOT / "test" / "test-reports",
-                                        prefix="{}_".format(test_module.replace("\\", "-").replace("/", "-")))
-    os.close(log_fd)
+
     command = (launcher_cmd or []) + executable + argv
+    command = ["python", test_module, "-k", "test_conv1d_vs_scipy_mode_same_cuda_complex64", "--repeat", "150"]
     print_to_stderr("Executing {} ... [{}]".format(command, datetime.now()))
-    with open(log_path, "w") as f:
-        ret_code = shell(command, test_directory, stdout=f, stderr=f, env=env)
-    print_log_file(test_module, log_path, failed=(ret_code != 0))
-    os.remove(log_path)
+    ret_code = shell(command, test_directory, env=env)
     return ret_code
 
 
@@ -1207,6 +1202,7 @@ def main():
 
     test_directory = str(REPO_ROOT / "test")
     selected_tests = get_selected_tests(options)
+    selected_tests = ['nn/test_convolution']
 
     if options.verbose:
         print_to_stderr("Selected tests:\n {}".format("\n ".join(selected_tests)))
