@@ -2117,12 +2117,8 @@ class TestCase(expecttest.TestCase):
             if TEST_WITH_CROSSREF:
                 stack.enter_context(CrossRefMode())
             num_runs = 150
-            self._run_with_retry(
-                result=result,
-                num_runs_left=num_runs,
-                report_only=not OVERRIDE_FLAKY_SIGNAL,
-                num_red=0,
-                num_green=0)
+            for _ in range(num_runs):
+                super().run(result=result)
 
     def setUp(self):
         check_if_enable(self)
