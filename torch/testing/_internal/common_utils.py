@@ -777,7 +777,7 @@ def run_tests(argv=UNITTEST_ARGS):
             resultclass=XMLTestResultVerbose))
     elif REPEAT_COUNT > 1:
         for _ in range(REPEAT_COUNT):
-            if not unittest.main(exit=False, argv=argv).result.wasSuccessful():
+            if not unittest.main(exit=False, argv=argv + ["-v"]).result.wasSuccessful():
                 sys.exit(-1)
     else:
         unittest.main(argv=argv)
