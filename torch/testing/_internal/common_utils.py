@@ -2108,7 +2108,7 @@ class TestCase(expecttest.TestCase):
         elif not report_only and num_retries_left < MAX_NUM_RETRIES:
             # in this case, our test was rerun (as a retry has been used) and it just passed.
             # we incur one more recursive call with num_runs_left = 0 to allow for accurate flaky reporting
-            self._run_with_retry(result=result, num_runs_left=0, report_only=report_only,
+            self._run_with_retry(result=result, num_runs_left=num_retries_left, report_only=report_only,
                                  num_red=num_red, num_green=num_green + 1)
 
 
@@ -2116,7 +2116,7 @@ class TestCase(expecttest.TestCase):
         with contextlib.ExitStack() as stack:
             if TEST_WITH_CROSSREF:
                 stack.enter_context(CrossRefMode())
-            num_runs = MAX_NUM_RETRIES + 1 if RETRY_TEST_CASES else 1
+            num_runs = 150
             self._run_with_retry(
                 result=result,
                 num_runs_left=num_runs,
