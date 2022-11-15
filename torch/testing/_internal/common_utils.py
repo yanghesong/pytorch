@@ -2105,7 +2105,7 @@ class TestCase(expecttest.TestCase):
             result.addUnexpectedSuccess(self)
             self._run_with_retry(result=result, num_runs_left=num_retries_left, report_only=report_only,
                                  num_red=num_red, num_green=num_green + 1)
-        elif not report_only and num_retries_left < MAX_NUM_RETRIES:
+        elif num_retries_left < MAX_NUM_RETRIES:
             # in this case, our test was rerun (as a retry has been used) and it just passed.
             # we incur one more recursive call with num_runs_left = 0 to allow for accurate flaky reporting
             self._run_with_retry(result=result, num_runs_left=num_retries_left, report_only=report_only,
