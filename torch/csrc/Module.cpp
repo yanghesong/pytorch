@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <unordered_map>
 
+#include <ATen/ThreadLocalPythonObjects.h>
 #include <torch/csrc/DataLoader.h>
 #include <torch/csrc/Device.h>
 #include <torch/csrc/Dtype.h>
@@ -1499,6 +1500,23 @@ Call this whenever a new thread is created in order to propagate values from
             size_bytes,
             at::DataPtr(reinterpret_cast<void*>(data_ptr), device));
       });
+
+  py_module.def("_stash_obj_in_tls", [](std::string key, py::handle arg) {
+    at::impl::ThreadLocalPythonObjects::get_state().set(
+        key,
+        std::make_shared<c10::SafePyObject>(arg.ptr(), getPyInterpreter()));
+  });
+
+  py_module.def("_get_obj_in_tls", [](std::string key) -> py::handle {
+    auto safe_pyobject =
+        at::impl::ThreadLocalPythonObjects::get_state().get(key);
+    auto obj = safe_pyobject->ptr(getPyInterpreter());
+    return py::handle(obj);
+  });
+
+  py_module.def("_key_in_tls", [](std::string key) -> bool {
+    return at::impl::ThreadLocalPythonObjects::get_state().contains(key);
+  });
 
 #ifdef USE_CUDA
   PyObject* has_cuda = Py_True;
