@@ -1661,6 +1661,12 @@ def run(runner, args, original_dir=None):
         # Only dump error on CI
         args.quiet = True
         args.repeat = 2
+        # CI machine has smaller GPU memory
+        if args.batch_size is None:
+            if runner.suite_name == "huggingface":
+                args.batch_size = 1
+            else:
+                args.batch_size = 2
         if args.backend == "aot_eager":
             args.exclude = (
                 CI_SKIP_AOT_EAGER_TRAINING
