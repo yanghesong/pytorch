@@ -26,10 +26,8 @@ struct TORCH_CUDA_CPP_API CUDAGraph {
   MempoolId_t pool();
 
   protected:
-#if defined(CUDA_VERSION) && CUDA_VERSION >= 11000
   cudaGraph_t graph_ = NULL;
   cudaGraphExec_t graph_exec_ = NULL;
-#endif
 
   // internal states so reset() can do its best cleaning up
   // Set to true in capture_end if cudaStreamEndCapture succeeded
