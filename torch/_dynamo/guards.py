@@ -11,6 +11,7 @@ from inspect import currentframe, getframeinfo
 from typing import Any, Callable, Dict, List, Optional, Set
 
 import numpy as np
+import numba
 
 import sympy
 
@@ -538,20 +539,28 @@ class TensorReference(object):
 
 
 class DynamoGuardPrinter(StrPrinter):
-    @staticmethod
-    def tensor_ref_as_str(tensor_ref, id_to_name_map):
-        if tensor_ref.kind in ("size", "stride"):
-            return f"{id_to_name_map[tensor_ref.ref_id]}.{tensor_ref.kind}()[{tensor_ref.idx}]"
-        return f"{id_to_name_map[tensor_ref.ref_id]}.{tensor_ref.kind}()"
-
     def __init__(
-        self, expr_to_tensor_ref, id_to_name_map, shape_env, intermediary_symbols
+        self, expr_to_tensor_ref, id_to_name_map, shape_env, intermediary_symbols, get_tensor_ref_expr
     ):
         super().__init__()
         self.expr_to_tensor_ref = expr_to_tensor_ref
         self.id_to_name_map = id_to_name_map
         self.shape_env = shape_env
         self.intermediary_symbols = intermediary_symbols
+        self.get_tensor_ref_expr = get_tensor_ref_expr
+
+    def _print_Relational(self, expr) -> str:
+        lhs, rhs = self._print(expr.lhs), self._print(expr.rhs)
+        return f"({lhs}) {expr.rel_op} ({rhs})"
+
+    def _print_And(self, expr) -> str:
+        args = [f"({self._print(a)})" for a in expr.args]
+        return " and ".join(args)
+
+    def _print_Mod(self, expr) -> str:
+        assert len(expr.args) == 2
+        lhs, rhs = self._print(expr.args[0]), self._print(expr.args[1])
+        return f"(({lhs}) % ({rhs}))"
 
     def _print_Symbol(self, expr) -> str:
         assert isinstance(expr, sympy.Symbol)
@@ -566,7 +575,7 @@ class DynamoGuardPrinter(StrPrinter):
         tensor_ref = next(
             iter(refs)
         )  # Any is fine here, because we install equality guards later
-        return DynamoGuardPrinter.tensor_ref_as_str(tensor_ref, self.id_to_name_map)
+        return self.get_tensor_ref_expr(tensor_ref)
 
 
 # NB: Naively, you'd expect this to only be a function that produces
@@ -631,6 +640,16 @@ class CheckFunctionManager:
     """
 
     def _parse_symbolic_shape_expressions(self, tensor_check_names, tensor_check_ids):
+        def get_tensor_ref_source(tensor_ref) -> str:
+            return f"{id_to_name_map[tensor_ref.ref_id]}.{tensor_ref.kind}()"
+
+        def get_tensor_ref_varname(tensor_ref) -> str:
+            return f"{id_to_name_map[tensor_ref.ref_id]}_{tensor_ref.kind}"
+
+        def get_tensor_ref_expr(tensor_ref) -> str:
+            index_expr = f"[{tensor_ref.idx}]" if tensor_ref.kind in ("size", "stride") else ""
+            return f"{get_tensor_ref_varname(tensor_ref)}{index_expr}"
+
         # Pre join output
         finished_expressions = []
 
@@ -648,6 +667,7 @@ class CheckFunctionManager:
             id_to_name_map,
             self.output_graph.shape_env,
             self.output_graph.intermediary_symbols,
+            get_tensor_ref_expr
         )
 
         # tensor_check_names is the primary tensor association mechanism in dynamo.
@@ -676,10 +696,7 @@ class CheckFunctionManager:
 
         for expr in expr_to_tensor_ref.keys():
             tensor_refs = expr_to_tensor_ref[expr].keys()
-            equality_candidates = [
-                DynamoGuardPrinter.tensor_ref_as_str(x, id_to_name_map)
-                for x in tensor_refs
-            ]
+            equality_candidates = [get_tensor_ref_expr(x) for x in tensor_refs]
 
             if len(equality_candidates) > 1:
                 equality_expr = " == ".join(equality_candidates)
@@ -689,8 +706,33 @@ class CheckFunctionManager:
         if len(finished_expressions) == 0:
             return None
 
-        expression = " and ".join(finished_expressions)
-        return f"({expression})"
+        varnames_and_sources = sorted(list({
+            (get_tensor_ref_varname(r), get_tensor_ref_source(r))
+            for refs in expr_to_tensor_ref.values()
+            for r in refs
+        }))
+
+
+        fn_name = "___symbolic_shape_fn"
+        arguments = ", ".join(f"list({s})" for _, s in varnames_and_sources)
+        wrapper_expression = f"{fn_name}({arguments})"
+        parameters = ", ".join(v for v, _ in varnames_and_sources)
+        expression = " and \n".join(finished_expressions)
+        py_code = f"""\
+def {fn_name}({parameters}) -> bool:
+    return ({expression})
+"""
+
+        try:
+            out = {}
+            exec(py_code, dict(), out)
+            wrapper_fn = numba.jit(nopython=True, nogil=True)(out[fn_name])
+        except:
+            logging.error(f"Code that failed to compile:\n{py_code}")
+            raise
+
+        SymbolicShapesExpr = collections.namedtuple("SymbolicShapeExpr", ["expr", "wrapper_expr", "fn"])
+        return SymbolicShapesExpr(expression, wrapper_expression, wrapper_fn)
 
     def compile_check_fn(self, local_builder, global_builder, guards_out):
         assert not (set(local_builder.argnames) & set(global_builder.argnames))
@@ -715,6 +757,7 @@ class CheckFunctionManager:
         tensor_check_ids = local_builder.tensor_check_ids.copy()
         tensor_check_ids.update(global_builder.tensor_check_ids)
 
+        symbolic_shape_fn = None
         check_tensors_fn = None
         check_tensors_verbose_fn = None
         if tensor_check_names:
@@ -736,14 +779,15 @@ class CheckFunctionManager:
             )
             verbose_code_parts.append(f"___check_tensors_verbose({verbose_args})")
             if symbolic_shape_expression:
-                code_parts.append(symbolic_shape_expression)
-                verbose_code_parts.append(symbolic_shape_expression)
+                code_parts.append(symbolic_shape_expression.wrapper_expr)
+                verbose_code_parts.append(symbolic_shape_expression.wrapper_expr)
+                symbolic_shape_fn = symbolic_shape_expression.fn
                 guards_out.add(
                     Guard(
                         name="symbolic_shape_expression",
                         source=None,
                         create_fn=GuardBuilder.SYMBOL_MATCH,
-                        code_list=symbolic_shape_expression,
+                        code_list=symbolic_shape_expression.expr,
                     )
                 )
 
@@ -757,6 +801,7 @@ class CheckFunctionManager:
         closure_vars = collections.OrderedDict(
             [
                 ("___guarded_code", self),
+                ("___symbolic_shape_fn", symbolic_shape_fn),
                 ("___check_tensors", check_tensors_fn),
                 ("___check_tensors_verbose", check_tensors_verbose_fn),
                 ("tensor_check_names", tensor_check_names),
