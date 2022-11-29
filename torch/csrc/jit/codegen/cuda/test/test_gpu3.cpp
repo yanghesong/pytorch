@@ -1309,7 +1309,6 @@ TEST_F(NVFuserTest, FusionIssue1430_CUDA) {
   auto tvs = Welford(tv2, {1, 2, 3, 4});
   auto tv3 = tvs.avg;
   auto tv4 = tvs.var_sum;
-  auto tv5 = tvs.n;
 
   // avg
   auto tv6 = broadcast(tvs.avg, {false, true, true, true, true});
@@ -3017,7 +3016,7 @@ TEST_F(NVFuserTest, FusionCpAsyncPredicate_CUDA) {
   fusion.addOutput(tv1);
 
   auto tv0_shared = tv0->cacheAfter(LoadStoreOpType::CpAsync);
-  auto tv0_reg = tv0_shared->cacheAfter();
+  auto tv0_reg = tv0_shared->cacheAfter(); // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   tv0_shared->setMemoryType(MemoryType::Shared);
   tv0->computeAt(tv1, 1);
 
@@ -3248,7 +3247,8 @@ graph(%x.1 : Tensor,
     auto x = torch::rand({32, 32}, at::TensorOptions(at::kCUDA));
     auto y = torch::rand({32, 32}, at::TensorOptions(at::kCUDA));
     std::vector<IValue> results;
-    for (const auto& _ : c10::irange(10)) {
+    for (const auto& i : c10::irange(10)) {
+      (void)i; // Suppress unused variable warning
       auto stack = createStack({x.clone(), y.clone()});
       fn.run(stack);
       results.push_back(stack.back());
@@ -3294,7 +3294,8 @@ TEST_F(NVFuserMultithreadedTest, MultipleFunctions_CUDA) {
     auto y = torch::rand({32, 32}, at::TensorOptions(at::kCUDA));
     std::vector<IValue> results;
     constexpr size_t numRuns = 10;
-    for (const auto& _ : c10::irange(numRuns)) {
+    for (const auto& i : c10::irange(numRuns)) {
+      (void)i; // Suppress unused variable warning
       auto stack = createStack({x.clone(), y.clone()});
       fn.run(stack);
       results.push_back(stack.back());
@@ -3367,12 +3368,15 @@ TEST_F(NVFuserTest, FusionTestReEntrantGridWelford_CUDA) {
   auto tvs = Welford(tv1, {0, 1, 2});
   auto tv_avg = tvs.avg;
   auto tv_M2 = tvs.var_sum;
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto tv_N = tvs.n;
   fusion.addOutput(tv_avg);
   fusion.addOutput(tv_M2);
 
   auto cached_input = tv0->cacheAfter();
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto cached_avg = tv_avg->cacheBefore();
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto cached_M2 = tv_M2->cacheBefore();
 
   auto reduction_tv = scheduler_utils::getReductionTvs(&fusion)[0];
@@ -6240,6 +6244,7 @@ TEST_F(NVFuserTest, FusionTrivialInputForwarding_CUDA) {
   fusion->addInput(tv1);
   // Note: tv2 is not needed. Kept it here since previously there was an
   // assertion from sorting in codegen.
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto tv2 = add(tv1, IrBuilder::create<Double>(3.141));
   fusion->addOutput(tv0);
 

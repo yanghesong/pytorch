@@ -780,6 +780,7 @@ TEST_F(NVFuserTest, FusionReductionHalf_CUDA) {
       at::TensorOptions().dtype(at::kHalf).device(at::kCUDA, 0);
   at::Tensor aten_input = at::randn({8, 8, 16}, options);
 
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto reduction_tv = tv3;
 
   auto reduction_params = getReductionHeuristics(&fusion, {aten_input});
@@ -1080,6 +1081,7 @@ TEST_F(NVFuserTest, FusionDetectTrivialReduction1_CUDA) {
   tv2->split(1, 4);
   tv2->split(1, 8);
   auto tv3 = tv2->rFactor({-1});
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto tv4 = tv2->rFactor({-1});
 
   auto tv5 = broadcast(tv0, {true, false});
@@ -3716,6 +3718,7 @@ TEST_F(NVFuserTest, FusionVectorizeSimple_CUDA) {
 
   auto tv0_cache = tv0->cacheAfter();
 
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto tv1_cache = tv1->cacheBefore();
 
   tv1->merge(0);
@@ -3769,6 +3772,7 @@ TEST_F(NVFuserTest, FusionSimpleVectorizeUnroll_CUDA) {
 
   auto tv0_cache = tv0->cacheAfter();
   auto tv1_cache = tv1->cacheAfter();
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto tv3_cache = tv3->cacheBefore();
 
   // Do transformations, remember, transformations are outputs to inputs
@@ -4184,6 +4188,7 @@ TEST_F(NVFuserTest, FusionVectorizeMisalignedPointwise_CUDA) {
 
   auto c0 = tv0->cacheAfter();
   auto c1 = tv1->cacheAfter();
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto c2 = tv2->cacheBefore();
 
   tv2->split(-1, kVecSize);
@@ -4238,6 +4243,7 @@ TEST_F(NVFuserTest, FusionVectorizeMisalignedPointwiseMergeContig_CUDA) {
 
   auto c0 = tv0->cacheAfter();
   auto c1 = tv1->cacheAfter();
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto c2 = tv2->cacheBefore();
 
   tv2->split(0, 128);
@@ -4293,10 +4299,12 @@ TEST_F(NVFuserTest, FusionVectorizeMisalignedPointwiseMergeSymbolicPass_CUDA) {
   // Create caches for vectorization
   auto c0 = tv0->cacheAfter();
   auto c1 = tv1->cacheAfter();
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto c2 = tv2->cacheBefore();
 
   // Merge all dimensions together except inner-most dim
   for (const auto idx : c10::irange(kNumDims - 2)) {
+    (void)idx; // Suppress unused variable warning
     tv2->merge(0);
   }
   // Split inner-most dim
@@ -4356,6 +4364,7 @@ TEST_F(NVFuserTest, FusionVectorizeMisalignedPointwiseMergeSymbolicFail_CUDA) {
   // Create caches for vectorization
   auto c0 = tv0->cacheAfter();
   auto c1 = tv1->cacheAfter();
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto c2 = tv2->cacheBefore();
 
   // Merge all dimensions together
@@ -4475,6 +4484,7 @@ TEST_F(NVFuserTest, FusionVectorizeMisalignedWrongDimFail_CUDA) {
 
   auto c0 = tv0->cacheAfter();
   auto c1 = tv1->cacheAfter();
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto c2 = tv2->cacheBefore();
 
   c0->computeAt(tv2, -2);
@@ -4563,6 +4573,7 @@ TEST_F(NVFuserTest, FusionVectorizeMisalignedStrideFail_CUDA) {
 
   auto c0 = tv0->cacheAfter();
   auto c1 = tv1->cacheAfter();
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto c2 = tv2->cacheBefore();
 
   tv2->split(-1, kVecSize);
@@ -4613,6 +4624,7 @@ TEST_F(NVFuserTest, FusionVectorization1_CUDA) {
 
   auto c0 = tv0->cacheAfter();
   auto c1 = tv1->cacheAfter();
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto c2 = tv2->cacheBefore();
 
   c0->computeAt(tv2, -2);
@@ -4662,6 +4674,7 @@ TEST_F(NVFuserTest, FusionVectorization2_CUDA) {
 
   auto c0 = tv0->cacheAfter();
   auto c1 = tv1->cacheAfter();
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto c2 = tv2->cacheBefore();
 
   c0->computeAt(tv2, -2);
@@ -4701,6 +4714,7 @@ TEST_F(NVFuserTest, FusionVectorization3_CUDA) {
 
   auto c0 = tv0->cacheAfter();
   auto c1 = tv1->cacheAfter();
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto c2 = tv2->cacheBefore();
 
   c0->computeAt(tv2, -2);
@@ -5216,7 +5230,6 @@ TEST_F(NVFuserTest, FusionBlockWelfordInSerialLoop_CUDA) {
   fusion.addInput(tv0);
   auto tv_avg = tvs.avg;
   auto tv_M2 = tvs.var_sum;
-  auto tv_N = tvs.n;
   fusion.addOutput(tv_avg);
   fusion.addOutput(tv_M2);
 
@@ -5243,7 +5256,6 @@ TEST_F(NVFuserTest, FusionIOTensorTrivialReductionRepro_CUDA) {
   FusionGuard fg(&fusion);
 
   constexpr int M = 10;
-  constexpr int N = 11;
 
   auto tv0 = makeSymbolicTensor(1);
   fusion.addInput(tv0);
@@ -5256,6 +5268,7 @@ TEST_F(NVFuserTest, FusionIOTensorTrivialReductionRepro_CUDA) {
   auto path1 = sum(path1_bcast, reduction_axes);
   fusion.addOutput(path1);
 
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto p = path1->split(1, 1);
   path1->rFactor({1});
   path1->axis(0)->parallelize(ParallelType::BIDx);
@@ -5751,7 +5764,7 @@ TEST_F(NVFuserTest, FusionBNBackwardRepro2_CUDA) {
   int c = 81;
   int h = 1;
   int w = 1;
-  int numDims = 4;
+  // int numDims = 4;
 
   // auto input = makeSymbolicTensor(numDims);
   auto input = makeConcreteTensor({-1, -1, 1, 1});
@@ -7013,6 +7026,7 @@ TEST_F(NVFuserTest, FusionPredicateElimination3_CUDA) {
   auto tv2 = add(tv1, IrBuilder::create<Double>(1));
   fusion.addOutput(tv2);
 
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto tv3 = tv0->cacheAfter();
 
   tv1->split(0, 10);
@@ -7481,9 +7495,11 @@ TEST_F(NVFuserTest, FusionBufferReuseStressTest_CUDA) {
   auto tv5 = broadcast(tv4, {true, false, false});
   auto tv6 = mul(tv5, IrBuilder::create<Double>(5));
   auto tv7 = mul(tv6, tv1);
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto tv8 = mul(tv7, IrBuilder::create<Double>(7));
   // tv9 shouldn't alias to avoid buffer over-subscription
   auto tv9 = broadcast(tv4, {true, false, false});
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto tv10 = mul(tv9, IrBuilder::create<Double>(9));
   auto tv11 = add(tv5, tv9);
   fusion->addOutput(tv7);
@@ -7767,6 +7783,7 @@ TEST_F(NVFuserTest, FusionIssue1021_CUDA) {
   auto tv2 = broadcast(tv1, {false, true});
   fusion.addOutput(tv2);
 
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto tv3 = tv2->cacheBefore();
 
   tv2->split(0, 2);
@@ -8159,7 +8176,8 @@ TEST_F(NVFuserTest, FusionSegmenterCombineReductionsCycleRepro_CUDA) {
   args.push(aten_inputs);
   args.push(val);
 
-  for (auto _ : c10::irange(5)) {
+  for (auto i : c10::irange(5)) {
+    (void)i; // Suppress unused variable warning
     auto segmented_fusion =
         SegmentCandidateFinder::segment(fusion_ptr.get(), args);
   }
@@ -9691,6 +9709,7 @@ TEST_F(NVFuserTest, FusionRfactorPredication1_CUDA) {
   fusion.addOutput(tv4);
 
   tv2->split(0, 4);
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto tv5 = tv2->rFactor({1});
 
   tv0->computeAt(tv2, 1);

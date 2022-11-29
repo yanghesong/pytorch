@@ -532,7 +532,6 @@ TEST_F(NVFuserTest, FusionFusedReductionBatchnorm_CUDA) {
   auto tvs = Welford(tv5, {0, 2, 3});
   auto tv8 = tvs.avg;
   auto tv9 = tvs.var_sum;
-  auto tv10 = tvs.n;
   auto tv11 = mul(tv8, IrBuilder::create<Double>(0.1));
   auto tv12 = mul(tv3, d34);
   auto tv13 = add(tv12, tv11);
@@ -557,15 +556,15 @@ TEST_F(NVFuserTest, FusionFusedReductionBatchnorm_CUDA) {
   fusion.addOutput(tv17);
   fusion.addOutput(tv29);
 
-  auto tv0_cache = tv0->cacheAfter();
-  auto tv1_cache = tv1->cacheAfter();
-  auto tv2_cache = tv2->cacheAfter();
-  auto tv3_cache = tv3->cacheAfter();
-  auto tv4_cache = tv4->cacheAfter();
+  auto tv0_cache = tv0->cacheAfter(); // NOLINT(clang-diagnostic-unused-variable)
+  auto tv1_cache = tv1->cacheAfter(); // NOLINT(clang-diagnostic-unused-variable)
+  auto tv2_cache = tv2->cacheAfter(); // NOLINT(clang-diagnostic-unused-variable)
+  auto tv3_cache = tv3->cacheAfter(); // NOLINT(clang-diagnostic-unused-variable)
+  auto tv4_cache = tv4->cacheAfter(); // NOLINT(clang-diagnostic-unused-variable)
 
-  auto tv13_cache = tv13->cacheBefore();
-  auto tv17_cache = tv17->cacheBefore();
-  auto tv29_cache = tv29->cacheBefore();
+  auto tv13_cache = tv13->cacheBefore(); // NOLINT(clang-diagnostic-unused-variable)
+  auto tv17_cache = tv17->cacheBefore(); // NOLINT(clang-diagnostic-unused-variable)
+  auto tv29_cache = tv29->cacheBefore(); // NOLINT(clang-diagnostic-unused-variable)
 
   tv0->split(1, NamedScalar::getParallelDim(ParallelType::BIDx), false);
   tv0->split(0, NamedScalar::getParallelDim(ParallelType::BIDy), false);
@@ -1378,9 +1377,9 @@ TEST_F(NVFuserTest, FusionPersistentBNBackwardAllreduce_CUDA) {
 
   auto input_cache = input->cacheAfter();
   auto grad_output_cache = grad_output->cacheAfter();
-  auto weight_cache = weight->cacheAfter();
-  auto save_mean_cache = save_mean->cacheAfter();
-  auto save_invstd_cache = save_invstd->cacheAfter();
+  auto weight_cache = weight->cacheAfter(); // NOLINT(clang-diagnostic-unused-variable)
+  auto save_mean_cache = save_mean->cacheAfter(); // NOLINT(clang-diagnostic-unused-variable)
+  auto save_invstd_cache = save_invstd->cacheAfter(); // NOLINT(clang-diagnostic-unused-variable)
 
   // Group the two reductions
   groupReductions({grad_output_sum, dot_p});
@@ -1733,7 +1732,7 @@ TEST_F(
   TORCH_CHECK(num_channels % vector == 0);
   // Use at most 32 TIDx threads
   const int64_t tidx = std::min<int64_t>(32l, num_channels / vector);
-  const auto bidx = ceilDiv(num_channels, tidx * vector);
+  const auto bidx = ceilDiv(num_channels, tidx * vector); // NOLINT(clang-diagnostic-unused-variable)
 
   const int64_t tidy = 8;
   const int64_t reduction_work_per_thread = 8;
@@ -2314,7 +2313,6 @@ TEST_F(NVFuserTest, FusionCrossIterationGroupedGridAllreduceWelfordShmoo_CUDA) {
     auto tv4 = tvs.n;
     auto tv5 = broadcast(tv2, bcast_pattern);
     auto tv6 = broadcast(tv3, bcast_pattern);
-    auto tv7 = broadcast(tv4, bcast_pattern);
     auto tv8 = sub(tv1, tv5);
     auto tv9 = add(tv8, tv6);
     // auto tv10 = div(tv9, tv7);
@@ -2324,7 +2322,9 @@ TEST_F(NVFuserTest, FusionCrossIterationGroupedGridAllreduceWelfordShmoo_CUDA) {
     // Schedule the fusion as it will be done by the persistent
     // scheduler
 
+    // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
     auto input_cache = tv1;
+    // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
     auto output_cache = tv9->cacheBefore();
 
     auto transform_ref = tv2;
@@ -2402,6 +2402,7 @@ TEST_F(NVFuserTest, FusionCrossIterationGroupedGridAllreduceWelfordShmoo_CUDA) {
     GpuLower gpulw(&fusion);
     bool validated = false;
     for (auto expr : KernelExprVisitor::getAllExprs(gpulw.kernel())) {
+      // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
       auto grouped_grid_reduction =
           dynamic_cast<kir::GroupedGridWelford*>(expr);
       validated = true;

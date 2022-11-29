@@ -648,7 +648,7 @@ TEST_F(NVFuserTest, FusionManualScheduleTransposeComplexDAG1_CUDA) {
   auto tv0_cache = tv0->cacheAfter();
   auto tv1_cache = tv1->cacheAfter();
   auto tv2_cache = tv2->cacheAfter();
-  auto tv9_cache = tv9->cacheBefore();
+  auto tv9_cache = tv9->cacheBefore(); // NOLINT(clang-diagnostic-unused-variable)
   auto tv10_cache = tv10->cacheBefore();
   auto tv12_cache = tv12->cacheBefore();
 

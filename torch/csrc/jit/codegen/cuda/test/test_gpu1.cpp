@@ -7991,6 +7991,7 @@ TEST_F(NVFuserTest, FusionCacheBefore_CUDA) {
   // Before: TV2 = TV1 * 3
   // After:  TV3 = TV1 * 3;
   //         TV2 = TV3;
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   TensorView* tv3 = tv2->cacheBefore();
 
   constexpr int BSX = 32;
@@ -8029,6 +8030,7 @@ TEST_F(NVFuserTest, FusionCacheAfter_CUDA) {
   // Before: TV1 = TV0 + 1
   // After:  TV3 = TV0;
   //         TV1 = TV3 + 1
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   TensorView* tv3 = tv0->cacheAfter();
 
   constexpr int BSX = 32;
@@ -8073,6 +8075,7 @@ TEST_F(NVFuserTest, FusionCacheFork_CUDA) {
   // Output:  TV3, TV2
 
   // cacheFork !!does not!! automatically apply ComputeAt to the cache
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto tv3 = tv1->cacheFork();
 
   constexpr int BSX = 32;
@@ -8705,6 +8708,7 @@ TEST_F(NVFuserTest, FusionMagicSchedulerLayerNormBackward_CUDA) {
     outer_shape.push_back(shape[idx]);
   }
   for (const auto idx : c10::irange(kOuterNumDims, kM)) {
+    (void)idx; // Suppress unused variable warning
     outer_shape.push_back(1);
   }
 
@@ -8793,6 +8797,7 @@ TEST_F(NVFuserTest, FusionMagicSchedulerRMSNormBackward_CUDA) {
     outer_shape.push_back(shape[idx]);
   }
   for (const auto idx : c10::irange(kOuterNumDims, kM)) {
+    (void)idx; // Suppress unused variable warning
     outer_shape.push_back(1);
   }
 

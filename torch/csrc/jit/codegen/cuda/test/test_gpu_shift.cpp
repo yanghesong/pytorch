@@ -2678,6 +2678,7 @@ TEST_F(NVFuserTest, FusionGather6_CUDA) {
 
   auto tv0_cache = tv0->cacheAfter();
   auto out = tv1;
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto out_cache = out->cacheBefore();
 
   out->split(1, block_x);
@@ -2738,6 +2739,7 @@ TEST_F(NVFuserTest, FusionGather7_CUDA) {
 
   auto tv0_cache = tv0->cacheAfter();
   auto out = tv1;
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto out_cache = out->cacheBefore();
 
   out->split(1, block_x);
@@ -2839,6 +2841,7 @@ TEST_F(NVFuserTest, FusionGather9_CUDA) {
 
   auto tv0_cache = tv0->cacheAfter();
   auto out = tv1;
+  // NOLINTNEXTLINE(clang-diagnostic-unused-variable)
   auto out_cache = out->cacheBefore();
 
   out->split(1, block_x);
