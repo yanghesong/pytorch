@@ -1582,7 +1582,7 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::collective(
 
   if (avoidRecordStreams_) {
     work->stashed_for_allocator_safety_ =
-         std::make_shared<std::vector<at::Tensor>>(inputs);
+        std::make_shared<std::vector<at::Tensor>>(inputs);
   }
 
   at::cuda::OptionalCUDAGuard gpuGuard;
@@ -1680,7 +1680,8 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::pointToPoint(
   // when it's safe to release the input back to the allocator,
   // and the present call has no way to know it's not an isend.
   // Therefore, we warn and fall back to the typical recordStream logic:
-  TORCH_WARN_ONCE(!avoidRecordStreams_,
+  TORCH_WARN_ONCE(
+      !avoidRecordStreams_,
       "NCCL_AVOID_RECORD_STREAMS=1 has no effect for point-to-point "
       "collectives.");
 
@@ -2167,8 +2168,8 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::allgather(
             ncclComm_t comm,
             at::cuda::CUDAStream& stream) {
           if (!avoidRecordStreams_) {
-          c10::cuda::CUDACachingAllocator::recordStream(
-              output.storage().data_ptr(), stream);
+            c10::cuda::CUDACachingAllocator::recordStream(
+                output.storage().data_ptr(), stream);
           }
           return ncclAllGather(
               input.data_ptr(),
@@ -2179,15 +2180,17 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::allgather(
               stream.stream());
         },
         [](std::vector<at::cuda::CUDAStream>& ncclStreams,
-            c10::intrusive_ptr<ProcessGroupNCCL::WorkNCCL>& work) {
-          // avoidRecordStreams_ note: We actually don't need to stash anything here.
+           c10::intrusive_ptr<ProcessGroupNCCL::WorkNCCL>& work) {
+          // avoidRecordStreams_ note: We actually don't need to stash anything
+          // here.
           //  - inputTensors is stashed onto work->stashed_for_allocator_safety_
           //    in collective().
           //  - outputFlattened is stashed onto work->outputs_ in collective().
           //  - User-facing outputTensors should be held by the user until after
           //    waiting on work_, or the call makes no sense.
-          // So all participating tensors are accounted for, and won't be released
-          // back to their allocation streams until after work_ is waited on.
+          // So all participating tensors are accounted for, and won't be
+          // released back to their allocation streams until after work_ is
+          // waited on.
         },
         [&](std::vector<at::cuda::CUDAStream>& ncclStreams) {
           // Copy the flattened output tensors to the outputs.
@@ -2197,7 +2200,7 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::allgather(
               // See [Sync Streams].
               if (!avoidRecordStreams_) {
                 c10::cuda::CUDACachingAllocator::recordStream(
-                  outputTensors[i][j].storage().data_ptr(), ncclStreams[i]);
+                    outputTensors[i][j].storage().data_ptr(), ncclStreams[i]);
               }
               outputTensors[i][j].copy_(outputFlattened[i][j], true);
             }
@@ -2297,18 +2300,20 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::reduce_scatter(
               stream.stream());
         },
         [&](std::vector<at::cuda::CUDAStream>& ncclStreams,
-          c10::intrusive_ptr<ProcessGroupNCCL::WorkNCCL>& work) {
-
-
+            c10::intrusive_ptr<ProcessGroupNCCL::WorkNCCL>& work) {
           if (avoidRecordStreams_) {
             // We only need to stash inputTensors.
-            //  - inputFlattened is stashed onto work->stashed_for_allocator_safety_
+            //  - inputFlattened is stashed onto
+            //  work->stashed_for_allocator_safety_
             //    in collective().
-            //  - User-facing outputTensors is stashed onto work->outputs_ in collective(),
-            //    and should also be held by the user until after waiting on work_.
+            //  - User-facing outputTensors is stashed onto work->outputs_ in
+            //  collective(),
+            //    and should also be held by the user until after waiting on
+            //    work_.
             auto& v = work->stashed_for_allocator_safety_;
             for (const auto i : c10::irange(inputTensors.size())) {
-              v->insert(v->end(), inputTensors[i].begin(), inputTensors[i].end());
+              v->insert(
+                  v->end(), inputTensors[i].begin(), inputTensors[i].end());
             }
           }
 
@@ -2317,11 +2322,9 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::reduce_scatter(
             at::cuda::CUDAStreamGuard guard(ncclStreams[i]);
             for (const auto j : c10::irange(inputTensors[0].size())) {
               // See [Sync Streams].
-              if (avoidRecordStreams_) {
-
-              } else { 
+              if (!avoidRecordStreams_) {
                 c10::cuda::CUDACachingAllocator::recordStream(
-                  inputTensors[i][j].storage().data_ptr(), ncclStreams[i]);
+                    inputTensors[i][j].storage().data_ptr(), ncclStreams[i]);
               }
               inputFlattened[i][j].copy_(inputTensors[i][j], true);
             }
@@ -2406,7 +2409,7 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::_reduce_scatter_base(
           at::cuda::CUDAStream& stream) {
         if (!avoidRecordStreams_) {
           c10::cuda::CUDACachingAllocator::recordStream(
-            output.storage().data_ptr(), stream);
+              output.storage().data_ptr(), stream);
         }
         auto ncclDataType = getNcclDataType(input.scalar_type());
         auto ncclReduceOp = getNcclReduceOp(
@@ -2421,7 +2424,7 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::_reduce_scatter_base(
             stream.stream());
       },
       [](std::vector<at::cuda::CUDAStream>&,
-          c10::intrusive_ptr<ProcessGroupNCCL::WorkNCCL>& work) {},
+         c10::intrusive_ptr<ProcessGroupNCCL::WorkNCCL>& work) {},
       [](std::vector<at::cuda::CUDAStream>&) {},
       OpType::_REDUCE_SCATTER_BASE,
       "nccl:_reduce_scatter_base");
@@ -2520,7 +2523,8 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::alltoall_base(
         std::vector<int64_t>(), // inSplitSizes
         std::vector<int64_t>()); // outSplitSizes
 
-    // avoidRecordStreams_ note: collective() will stash inputTensors and outputTensors.
+    // avoidRecordStreams_ note: collective() will stash inputTensors and
+    // outputTensors.
     return collective(
         inputTensors,
         outputTensors,
@@ -2560,7 +2564,8 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::alltoall_base(
         inputSplitSizes, // inSplitSizes
         outputSplitSizes); // outSplitSizes
 
-    // avoidRecordStreams_ note: collective() will stash inputTensors and outputTensors.
+    // avoidRecordStreams_ note: collective() will stash inputTensors and
+    // outputTensors.
     return collective(
         inputTensors,
         outputTensors,
@@ -2625,10 +2630,10 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::alltoall(
         return ncclSuccess;
       },
       [&](std::vector<at::cuda::CUDAStream>&,
-         c10::intrusive_ptr<ProcessGroupNCCL::WorkNCCL>& work) {
+          c10::intrusive_ptr<ProcessGroupNCCL::WorkNCCL>& work) {
         if (avoidRecordStreams_) {
-          // inputTensor0 and outputTensor0 are stashed redundantly by collective(),
-          // but that's ok.
+          // inputTensor0 and outputTensor0 are stashed redundantly by
+          // collective(), but that's ok.
           auto& v = work->stashed_for_allocator_safety_;
           v->insert(v->end(), inputTensors.begin(), inputTensors.end());
           v->insert(v->end(), outputTensors.begin(), outputTensors.end());
@@ -2803,9 +2808,9 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::gather(
         const auto root = opts.rootRank;
         if (getRank() == root) {
           if (!avoidRecordStreams_) {
-            for(auto output: outputs) {
+            for (auto output : outputs) {
               c10::cuda::CUDACachingAllocator::recordStream(
-                output.storage().data_ptr(), stream);
+                  output.storage().data_ptr(), stream);
             }
           }
         }
@@ -2889,11 +2894,11 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::scatter(
         const auto root = opts.rootRank;
         if (getRank() == root) {
           if (!avoidRecordStreams_) {
-            for(auto input: inputs) {
+            for (auto input : inputs) {
               c10::cuda::CUDACachingAllocator::recordStream(
-                input.storage().data_ptr(), stream);
-            } 
-          }
+                  input.storage().data_ptr(), stream);
+            }
+          
         }
         torch::cuda::nccl::scatter(
             inputs, outputTensors[0], comm, stream, root);
@@ -2972,3 +2977,4 @@ bool ProcessGroupNCCL::isUCCAvailable() const {
 } // namespace c10d
 
 #endif // USE_C10D_NCCL
+ 
