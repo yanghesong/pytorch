@@ -2898,7 +2898,7 @@ c10::intrusive_ptr<Work> ProcessGroupNCCL::scatter(
               c10::cuda::CUDACachingAllocator::recordStream(
                   input.storage().data_ptr(), stream);
             }
-          
+          } 
         }
         torch::cuda::nccl::scatter(
             inputs, outputTensors[0], comm, stream, root);
@@ -2977,4 +2977,3 @@ bool ProcessGroupNCCL::isUCCAvailable() const {
 } // namespace c10d
 
 #endif // USE_C10D_NCCL
- 
