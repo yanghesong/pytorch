@@ -9,11 +9,16 @@ namespace at {
 namespace cuda {
 
 MempoolId_t graph_pool_handle() {
+#if !defined(USE_ROCM)
   // uuid count starts at 1. 0 is reserved to mean "wasn't set by graph_pool_handle".
   static std::atomic<CaptureId_t> uuid{1};
   // Sets just the second value, to distinguish it from MempoolId_ts created from
   // cudaStreamGetCaptureInfo id_s in capture_begin.
   return {0, uuid++};
+#else
+  TORCH_CHECK(false, "CUDA graphs may is not yet supported on ROCM");
+  return {0, 0};
+#endif
 }
 
 /**
@@ -40,12 +45,13 @@ MempoolId_t graph_pool_handle() {
 CUDAGraph::CUDAGraph()
   // CUDAStreams may not be default-constructed.
   : capture_stream_(at::cuda::getCurrentCUDAStream()) {
-#if !defined(USE_ROCM)
+#if defined(USE_ROCM)
   TORCH_CHECK(false, "CUDA graphs is not yet supported on ROCM");
 #endif
 }
 
 void CUDAGraph::capture_begin(MempoolId_t pool/*=0*/) {
+#if !defined(USE_ROCM)
   TORCH_CHECK(!has_graph_exec_,
               "This CUDAGraph instance already owns a captured graph. "
               "To capture a new graph, create a new instance.");
@@ -115,9 +121,13 @@ void CUDAGraph::capture_begin(MempoolId_t pool/*=0*/) {
   // while calling capture_begin. They'll have no idea if their side thread's
   // kernel will end up as part of the capture or not.
   c10::cuda::CUDACachingAllocator::notifyCaptureBegin(capture_dev_, id_, mempool_id_);
+#else
+  TORCH_CHECK(false, "CUDA graphs is not yet supported on ROCM");
+#endif
 }
 
 void CUDAGraph::capture_end() {
+#if !defined(USE_ROCM)
   auto stream = at::cuda::getCurrentCUDAStream();
 
   TORCH_CHECK(stream == capture_stream_,
@@ -173,9 +183,13 @@ void CUDAGraph::capture_end() {
   // we don't need graph_ anymore.
   AT_CUDA_CHECK(cudaGraphDestroy(graph_));
   has_graph_ = false;
+#else
+  TORCH_CHECK(false, "CUDA graphs is not yet supported on ROCM");
+#endif
 }
 
 void CUDAGraph::replay() {
+#if !defined(USE_ROCM)
   TORCH_CHECK(has_graph_exec_,
               "Called CUDAGraph::replay without a preceding successful capture.");
 
@@ -204,9 +218,13 @@ void CUDAGraph::replay() {
     // The bug is fixed in CUDA 11.4+.
     AT_CUDA_CHECK(cudaDeviceSynchronize());
   }
+#else
+  TORCH_CHECK(false, "CUDA graphs is not yet supported on ROCM");
+#endif
 }
 
 void CUDAGraph::reset() {
+#if !defined(USE_ROCM)
   // I'd prefer these checks throw exceptions, not print warnings,
   // but the destructor calls reset(), and at least one CI build
   // refuses to compile with a throwing destructor.
@@ -236,12 +254,19 @@ void CUDAGraph::reset() {
   if (has_graph_exec_) {
     C10_CUDA_CHECK_WARN(cudaGraphExecDestroy(graph_exec_));
   }
+#else
+  TORCH_CHECK(false, "CUDA graphs is not yet supported on ROCM");
+#endif
 }
 
 // Returns an id another graph's capture_begin can use to share the same memory pool as this graph.
 MempoolId_t CUDAGraph::pool() {
+#if !defined(USE_ROCM)
   TORCH_CHECK(has_graph_exec_,
               "Called CUDAGraph::pool() without a preceding successful capture.");
+#else
+  TORCH_CHECK(false, "CUDA graphs is not yet supported on ROCM");
+#endif
   return mempool_id_;
 }
 
