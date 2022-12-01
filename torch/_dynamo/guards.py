@@ -10,6 +10,7 @@ import weakref
 from inspect import currentframe, getframeinfo
 from typing import Any, Callable, Dict, List, Optional, Set
 
+import ctypes
 import numpy as np
 import numba
 
@@ -714,9 +715,10 @@ class CheckFunctionManager:
 
 
         fn_name = "___symbolic_shape_fn"
-        arguments = ", ".join(f"list({s})" for _, s in varnames_and_sources)
+        arguments = ", ".join(f"(___int64 * len({s}))(*{s})" for _, s in varnames_and_sources)
         wrapper_expression = f"{fn_name}({arguments})"
         parameters = ", ".join(v for v, _ in varnames_and_sources)
+        sig = f"""boolean({", ".join("CPointer(int64)" for _ in range(len(varnames_and_sources)))})"""
         expression = " and \n".join(finished_expressions)
         py_code = f"""\
 def {fn_name}({parameters}) -> bool:
@@ -726,13 +728,13 @@ def {fn_name}({parameters}) -> bool:
         try:
             out = {}
             exec(py_code, dict(), out)
-            wrapper_fn = numba.jit(nopython=True, nogil=True)(out[fn_name])
+            wrapper_fn = numba.cfunc(sig)(out[fn_name])
         except:
             logging.error(f"Code that failed to compile:\n{py_code}")
             raise
 
         SymbolicShapesExpr = collections.namedtuple("SymbolicShapeExpr", ["expr", "wrapper_expr", "fn"])
-        return SymbolicShapesExpr(expression, wrapper_expression, wrapper_fn)
+        return SymbolicShapesExpr(expression, wrapper_expression, wrapper_fn.ctypes)
 
     def compile_check_fn(self, local_builder, global_builder, guards_out):
         assert not (set(local_builder.argnames) & set(global_builder.argnames))
@@ -802,6 +804,7 @@ def {fn_name}({parameters}) -> bool:
             [
                 ("___guarded_code", self),
                 ("___symbolic_shape_fn", symbolic_shape_fn),
+                ("___int64", ctypes.c_int64),
                 ("___check_tensors", check_tensors_fn),
                 ("___check_tensors_verbose", check_tensors_verbose_fn),
                 ("tensor_check_names", tensor_check_names),
