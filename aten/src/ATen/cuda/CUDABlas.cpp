@@ -506,6 +506,7 @@ void gemm<at::BFloat16>(CUDABLAS_GEMM_ARGTYPES(at::BFloat16)) {
 }
 #endif
 
+#if !defined(USE_ROCM)
 template <>
 void gemm<at::BFloat16>(CUDABLAS_GEMM_ARGTYPES(at::BFloat16)) {
   globalContext().alertCuBLASConfigNotDeterministic();
@@ -537,6 +538,7 @@ void gemm<at::BFloat16>(CUDABLAS_GEMM_ARGTYPES(at::BFloat16)) {
       CUDA_R_32F,
       CUBLAS_GEMM_DFALT_TENSOR_OP));
 }
+#endif // !defined(USE_ROCM)
 
 #if !defined(USE_ROCM) && !defined(_MSC_VER)
 
