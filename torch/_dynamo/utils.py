@@ -759,7 +759,7 @@ def wrap_to_fake_tensor(e, fake_mode):
         return e
 
 
-def wrap_to_fake_tensor_and_record(e, tx, ignore_subclass=False):
+def wrap_to_fake_tensor_and_record(e, tx, ignore_subclass=False, source=None):
     # The not fake tensor check here is annoying - ideally, fake tensors never call this during wrapping.
     # However, get_fake_value takes args and passes them through this, which may include fake tensors.
     # see tree_map(fake_wrapper, args) in get_fake_value.
@@ -769,6 +769,8 @@ def wrap_to_fake_tensor_and_record(e, tx, ignore_subclass=False):
         static_shapes = config.dynamic_shapes is False
         if type(e) is torch.nn.Parameter:
             # Always static for params
+            static_shapes = True
+        if source and source.guard_source().is_nn_module():
             static_shapes = True
         return wrap_fake_exception(
             lambda: make_fake_tensor(
@@ -1161,7 +1163,6 @@ def get_real_value(node, output_graph):
     except RuntimeError as e:
         raise TorchRuntimeError() from e
     return real_value
-
 
 def assert_no_fake_params_or_buffers(gm):
     from torch._subclasses.fake_tensor import FakeTensorConfig
