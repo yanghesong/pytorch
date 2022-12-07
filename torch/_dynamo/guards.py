@@ -1,3 +1,4 @@
+import cffi
 import collections
 import dataclasses
 import enum
@@ -53,6 +54,17 @@ CLOSURE_VARS = collections.OrderedDict(
         ("inf", float("inf")),
     ]
 )
+
+
+_FFI = cffi.FFI()
+_FFI.cdef("""
+
+const int64_t* CABI_get_tensor_size(int8_t* tensor_ptr);
+const int64_t* CABI_get_tensor_stride(int8_t* tensor_ptr);
+
+""")
+_LIB = _FFI.dlopen(os.path.join(os.path.dirname(torch.__file__), "lib", "libtorch_python.so"))
+
 
 
 class GuardSource(enum.Enum):
@@ -641,8 +653,11 @@ class CheckFunctionManager:
     """
 
     def _parse_symbolic_shape_expressions(self, tensor_check_names, tensor_check_ids):
-        def get_tensor_ref_source(tensor_ref) -> str:
-            return f"{id_to_name_map[tensor_ref.ref_id]}.{tensor_ref.kind}()"
+        # Pre join output
+        finished_expressions = []
+
+        # A mapping of tensor_ids to tensor names
+        id_to_name_map = {}
 
         def get_tensor_ref_varname(tensor_ref) -> str:
             return f"{id_to_name_map[tensor_ref.ref_id]}_{tensor_ref.kind}"
@@ -651,11 +666,78 @@ class CheckFunctionManager:
             index_expr = f"[{tensor_ref.idx}]" if tensor_ref.kind in ("size", "stride") else ""
             return f"{get_tensor_ref_varname(tensor_ref)}{index_expr}"
 
-        # Pre join output
-        finished_expressions = []
+        def get_tensor_varname(tensor_ref) -> str:
+            return f"{id_to_name_map[tensor_ref.ref_id]}"
 
-        # A mapping of tensor_ids to tensor names
-        id_to_name_map = {}
+        def jit_expressions(expressions):
+            fn_name = "___symbolic_shape_fn"
+            fn_generator_name = "___gen_symbolic_shape_fn"
+
+            closure_vars = collections.OrderedDict([
+                ("___lib", _LIB)
+            ])
+
+            CABI_fn_name = {
+                "size":   "CABI_get_tensor_size",
+                "stride": "CABI_get_tensor_stride",
+            }
+
+            # Map each parameter name to a sequence of unique TensorReference.
+            # The "unique sequence" is represented by an ordered dictionary mapping
+            # the string representation of the reference to the reference itself.
+            parameters_to_refs_map = collections.OrderedDict()
+            for refs in expr_to_tensor_ref.values():
+                for r in refs:
+                    name = get_tensor_varname(r)
+                    varname_to_ref_map = parameters_to_refs_map.setdefault(name, collections.OrderedDict())
+                    varname_to_ref_map[get_tensor_ref_varname(r)] = r
+
+            args = ", ".join(name for name in parameters_to_refs_map)
+            wrapper_expression = f"{fn_name}({args})"
+            expression = " and \n".join(expressions)
+            sig = f"""boolean({", ".join("CPointer(int8)" for _ in range(len(parameters_to_refs_map)))})"""
+
+            # Generate all the assignments corresponding to each TensorReference.
+            tensor_ref_creation = []
+            for parameter, varname_to_ref_map in parameters_to_refs_map.items():
+                for varname, r in varname_to_ref_map.items():
+                    assert r.kind in CABI_fn_name, f"unknown tensor ref kind: {r.kind}"
+                    tensor_ref_creation.append(f"{varname} = {CABI_fn_name[r.kind]}({parameter})")
+            tensor_ref_creation_str = "\n".join(" " * 8 + line for line in tensor_ref_creation)
+
+            py_code = f"""\
+def {fn_generator_name}({", ".join(closure_vars.keys())}):
+    CABI_get_tensor_size = ___lib.CABI_get_tensor_size
+    CABI_get_tensor_stride = ___lib.CABI_get_tensor_stride
+    def {fn_name}({args}) -> bool:
+{tensor_ref_creation_str}
+        return ({expression})
+    return {fn_name}
+"""
+
+            try:
+                out = {}
+                exec(py_code, dict(), out)
+                fn = out[fn_generator_name](*closure_vars.values())
+                numba_compiled_fn = numba.cfunc(sig)(fn)
+            except:
+                logging.error(f"Code that failed to compile:\n{py_code}")
+                raise
+
+            # Before actually executing the compiled function, we need to
+            # preprocess the tensor variables to what numba is actually expecting
+            # (according to the signature we gave above).
+            # In other words, we need to get a pointer to the actual tensor. In
+            # cpython, that can be done by calling the id function.
+            def wrapper_fn(*args):
+                args = [
+                    ctypes.cast(id(a), ctypes.POINTER(ctypes.c_int8))
+                    for a in args
+                ]
+                return numba_compiled_fn.ctypes(*args)
+
+            SymbolicShapesExpr = collections.namedtuple("SymbolicShapeExpr", ["expr", "wrapper_expr", "fn"])
+            return SymbolicShapesExpr(expression, wrapper_expression, wrapper_fn)
 
         # We should not have a shape env, or guards if we are not in config.dynamic shapes
         # But check it anyway.
@@ -707,34 +789,7 @@ class CheckFunctionManager:
         if len(finished_expressions) == 0:
             return None
 
-        varnames_and_sources = sorted(list({
-            (get_tensor_ref_varname(r), get_tensor_ref_source(r))
-            for refs in expr_to_tensor_ref.values()
-            for r in refs
-        }))
-
-
-        fn_name = "___symbolic_shape_fn"
-        arguments = ", ".join(f"(___int64 * len({s}))(*{s})" for _, s in varnames_and_sources)
-        wrapper_expression = f"{fn_name}({arguments})"
-        parameters = ", ".join(v for v, _ in varnames_and_sources)
-        sig = f"""boolean({", ".join("CPointer(int64)" for _ in range(len(varnames_and_sources)))})"""
-        expression = " and \n".join(finished_expressions)
-        py_code = f"""\
-def {fn_name}({parameters}) -> bool:
-    return ({expression})
-"""
-
-        try:
-            out = {}
-            exec(py_code, dict(), out)
-            wrapper_fn = numba.cfunc(sig)(out[fn_name])
-        except:
-            logging.error(f"Code that failed to compile:\n{py_code}")
-            raise
-
-        SymbolicShapesExpr = collections.namedtuple("SymbolicShapeExpr", ["expr", "wrapper_expr", "fn"])
-        return SymbolicShapesExpr(expression, wrapper_expression, wrapper_fn.ctypes)
+        return jit_expressions(finished_expressions)
 
     def compile_check_fn(self, local_builder, global_builder, guards_out):
         assert not (set(local_builder.argnames) & set(global_builder.argnames))
