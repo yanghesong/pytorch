@@ -80,8 +80,10 @@ bool can_use_expanded_index_path(const Tensor& self, int64_t dim, const Tensor& 
 
 using scatter_add_expanded_index_fn = void(*)(const Tensor&, const Tensor&, const Tensor&);
 using scatter_reduce_expanded_index_fn = void(*)(const Tensor&, const Tensor&, const Tensor&, const SCATTER_GATHER_OP& reduce, bool);
+using gather_expanded_index_fn = void (*)(const Tensor&, const Tensor&, const Tensor&);
 
 DECLARE_DISPATCH(scatter_add_expanded_index_fn, scatter_add_expanded_index_stub);
 DECLARE_DISPATCH(scatter_reduce_expanded_index_fn, scatter_reduce_expanded_index_stub);
+DECLARE_DISPATCH(gather_expanded_index_fn, gather_expanded_index_stub);
 
 }} // namespace at::native
