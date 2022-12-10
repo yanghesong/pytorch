@@ -5305,7 +5305,7 @@ if HAS_CPU:
                     kernel_profile_events.append(e.name)
             assert len(kernel_profile_events) > 0
 
-        def test_input_is_view(self):
+        def test_input_is_inplace_view(self):
             @torch._dynamo.optimize("inductor")
             def fn(a):
                 unsqueeze_ = torch.ops.aten.unsqueeze_.default(a, 0)
