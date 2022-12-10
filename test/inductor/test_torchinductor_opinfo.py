@@ -62,7 +62,7 @@ TestExpect = Enum("TestExpect", ("SUCCESS", "XFAILURE", "SKIP"))
 
 COLLECT_EXPECT = os.getenv("PYTORCH_COLLECT_EXPECT", "0") == "1"
 FAIL_ON_SUCCESS = os.getenv("PYTORCH_FAIL_ON_SUCCESS", "1") == "1"
-ALL_SAMPLES = os.getenv("PYTORCH_ALL_SAMPLES", "0") == "1"
+ALL_SAMPLES = True  # os.getenv("PYTORCH_ALL_SAMPLES", "0") == "1"
 START = os.getenv("PYTORCH_TEST_RANGE_START", None)
 END = os.getenv("PYTORCH_TEST_RANGE_END", None)
 
@@ -124,6 +124,8 @@ inductor_skips["cpu"] = {
     "linalg.ldl_solve": {b8, f16, f32, f64, i32, i64},  # segfault
     "linalg.ldl_factor": {f32, f64},  # flaky
     "__rdiv__": {b8, f16, f32, f64, i32, i64},  # flaky
+    "diff": {b8, f16, f32, f64, i32, i64},  # flaky
+    "_native_batch_norm_legit": {b8, f16, f32, f64, i32, i64},  # flaky
 }
 
 inductor_skips["cuda"] = {
@@ -146,6 +148,7 @@ inductor_expected_failures_single_sample["cpu"] = {
     "mH": {b8, f16, f32, f64, i32, i64},
     "mT": {b8, f16, f32, f64, i32, i64},
     "__getitem__": {b8, f16, f32, f64, i32, i64},
+    "rsub": {f16, f32, f64, i32, i64},
     "addr": {f16},
     "allclose": {f16, f32, f64},
     "amax": {f16},
@@ -201,6 +204,10 @@ inductor_expected_failures_single_sample["cpu"] = {
     "masked.var": {f16},
     "masked_fill": {f16},
     "masked_scatter": {f16, f32, f64},
+    "norm": {f16},
+    "renorm": {f16, f32, f64},
+    "repeat": {b8, f16, f32, f64, i32, i64},
+    "scatter": {b8, i64},
     "masked_select": {b8, f16, f32, f64, i32, i64},
     "max.reduction_no_dim": {f16},
     "max.reduction_with_dim": {b8},
@@ -302,6 +309,7 @@ inductor_expected_failures_single_sample["cuda"] = {
     "linalg.matrix_rank": {f32, f64},
     "linalg.matrix_rank.hermitian": {f32, f64},
     "linalg.pinv.singular": {f32, f64},
+    "linalg.householder_product": {f32},
     "masked.argmax": {f16, f32, f64, i32},
     "masked.argmin": {f16, f32, f64, i32},
     "masked_scatter": {f16, f32, f64},
@@ -320,6 +328,9 @@ inductor_expected_failures_single_sample["cuda"] = {
     "nonzero": {b8, f16, f32, f64, i32, i64},
     "normal": {f16, f32, f64},
     "normal.number_mean": {f16, f32, f64},
+    "norm": {f16, f64},
+    "renorm": {f16, f32, f64},
+    "repeat": {b8, f16, f32, f64, i32, i64},
     "pca_lowrank": {f32, f64},
     "polar": {f32, f64},
     "pow": {i32, i64},
@@ -330,6 +341,7 @@ inductor_expected_failures_single_sample["cuda"] = {
     "repeat_interleave": {b8, f16, f32, f64, i32, i64},
     "round.decimals_3": {f16},
     "scatter_reduce.prod": {f16, f32, f64},
+    "scatter": {b8, i64},
     "segment_reduce.lengths": {f16, f32, f64},
     "sparse.sampled_addmm": {f32, f64},
     "std_mean.unbiased": {f16},
@@ -370,14 +382,19 @@ inductor_gradient_expected_failures_single_sample["cuda"] = {
 
 inductor_should_fail_with_exception = defaultdict(dict)
 
-inductor_should_fail_with_exception["cpu"] = {}
+inductor_should_fail_with_exception["cpu"] = {
+    "__rpow__": {
+        i32: "Pow input must be floating point.",
+        i64: "Pow input must be floating point.",
+    },
+}
 
 
 inductor_should_fail_with_exception["cuda"] = {
     "__rpow__": {
         i32: "Pow input must be floating point.",
         i64: "Pow input must be floating point.",
-    }
+    },
 }
 
 
@@ -414,19 +431,207 @@ inductor_override_kwargs = {
     "linalg.lu_factor_ex": {"check_gradient": False},
 }
 
-# Always test with all sample for following ops
-inductor_all_samples = {
-    "softmax.with_dtype",
-    "index_add",
-    "index_copy",
-    "scatter_reduce.sum",
-    "select_scatter",
-    "squeeze",
-    "unsqueeze",
-    "sum",
-    "amax",
-    "amin",
-    "all",
+# passes with single input
+inductor_expected_failures_all_samples = defaultdict(dict)
+inductor_expected_failures_all_samples["cpu"] = {
+    "__rpow__": {f16, i32, i64},
+    "__rmatmul__": {f32, f64, i32, i64},
+    "_native_batch_norm_legit": {f32},
+    "native_batch_norm": {f32},
+    "aminmax": {f32, f64, i32, i64, b8},
+    "arange": {i64},
+    "baddbmm": {i32, i64},
+    "constant_pad_nd": {b8},
+    "diff": {f16, f64, i32, i64},
+    "double": {i32, i64, f16, f32, f64, b8},
+    "empty": {i32, i64, f16, f32, f64, b8},
+    "empty_like": {i32, i64, f16, f32, f64, b8},
+    "new_empty": {i32, i64, f16, f32, f64, b8},
+    "new_empty_strided": {i32, i64, f16, f32, f64, b8},
+    "gradient": {f16},
+    "dist": {f16},
+    "trapezoid": {f16},
+    "bool": {b8, f16, f32, f64, i32, i64},
+    "byte": {b8, f16, f32, f64, i32, i64},
+    "char": {b8, f16, f32, f64, i32, i64},
+    "float": {b8, f16, f32, f64, i32, i64},
+    "half": {b8, f16, f32, f64, i32, i64},
+    "int": {b8, f16, f32, f64, i32, i64},
+    "bfloat16": {b8, f16, f32, f64, i32, i64},
+    "short": {b8, f16, f32, f64, i32, i64},
+    "long": {b8, f16, f32, f64, i32, i64},
+    "gather": {b8, f16, f32, f64, i32, i64},
+    "cat": {b8, f16, f32, f64, i32, i64},
+    "cholesky_inverse": {f32, f64},
+    "index_put": {f16, f32, f64},
+    "cdist": {f32, f64},
+    "linalg.matrix_norm": {f16},
+    "linalg.norm.subgradients_at_zero": {f16},
+    "linalg.vector_norm": {f16},
+    "linspace": {f16, f32, f64, i32, i64},
+    "linalg.norm": {f16},
+    "masked.amax": {f16},
+    "masked.amin": {f16},
+    "masked.argmax": {f16, f32, f64, i32, i64},
+    "masked.argmin": {f16, f32, f64, i32, i64},
+    "masked.mean": {b8, f16},
+    "masked.sum": {f16},
+    "masked.var": {f16},
+    "masked.logsumexp": {f32, f64},
+    "matmul": {f32, f64, i32, i64},
+    "max_pool2d_with_indices_backward": {f32, f64},
+    "mean": {f16, f32, f64},
+    "narrow": {b8, f16, f32, f64, i32, i64},
+    "native_layer_norm": {f32, f64},
+    "new_zeros": {b8, f16, f32, f64, i32, i64},
+    "tile": {b8, f16, f32, f64, i32, i64},
+    "nn.functional.avg_pool2d": {f32},
+    "nn.functional.embedding_bag": {f16, f32, f64},
+    "nn.functional.layer_norm": {f32, f64},
+    "nn.functional.max_pool2d": {f32, f64},
+    "nn.functional.pad.circular": {f16},
+    "nn.functional.pdist": {f32, f64},
+    "nn.functional._scaled_dot_product": {f32, f64},
+    "nn.functional.adaptive_avg_pool1d": {f64},
+    "nn.functional.adaptive_avg_pool3d": {f16},
+    "nn.functional.alpha_dropout": {f32, f64},
+    "nn.functional.avg_pool1d": {f32, f64},
+    "nn.functional.batch_norm": {f32},
+    "nn.functional.conv2d": {f32, f64},
+    "nn.functional.cosine_embedding_loss": {b8},
+    "nn.functional.dropout2d": {f32, f64},
+    "nn.functional.dropout3d": {f32, f64},
+    "nn.functional.dropout": {f32, f64},
+    "nn.functional.fractional_max_pool2d": {f32, f64},
+    "nn.functional.fractional_max_pool3d": {f32, f64},
+    "nn.functional.huber_loss": {f16},
+    "nn.functional.interpolate.nearest": {f32, f64},
+    "nn.functional.upsample_nearest": {f32, f64},
+    "nn.functional._scaled_dot_product_attention": {f32, f64},
+    "nn.functional.feature_alpha_dropout.with_train": {f32, f64},
+    "linalg.norm_subgradients_at_zero": {f16},
+    "signal.windows.bartlett": {f16, f32, f64},
+    "signal.windows.blackman": {f16, f32, f64},
+    "signal.windows.cosine": {f16, f32, f64},
+    "signal.windows.exponential": {f16, f32, f64},
+    "signal.windows.gaussian": {f16, f32, f64},
+    "signal.windows.general_cosine": {f16, f32, f64},
+    "signal.windows.general_hamming": {f16, f32, f64},
+    "signal.windows.hamming": {f16, f32, f64},
+    "signal.windows.hann": {f16, f32, f64},
+    "signal.windows.kaiser": {f16, f32, f64},
+    "unflatten": {b8, i32, i64},
+}
+inductor_expected_failures_all_samples["cuda"] = {
+    "__rpow__": {f16},
+    "rsub": {f16, f32, f64, i32, i64},
+    "__rmatmul__": {f16, f32, f64},
+    "arange": {i64},
+    "diff": {f16},
+    "double": {i32, i64, f16, f32, f64, b8},
+    "empty": {i32, i64, f16, f32, f64, b8},
+    "empty_like": {i32, i64, f16, f32, f64, b8},
+    "new_empty": {i32, i64, f16, f32, f64, b8},
+    "new_empty_strided": {i32, i64, f16, f32, f64, b8},
+    "masked.argmax": {i64},
+    "__rmod__": {f16},
+    "__rmul__": {f16},
+    "addcmul": {f16},
+    "atan2": {f16},
+    "cumulative_trapezoid": {f16},
+    "trapezoid": {f16},
+    "dist": {f16},
+    "div.no_rounding_mode": {f16},
+    "einsum": {f16},
+    "fmod": {f16},
+    "gradient": {f16},
+    "ldexp": {f16},
+    "mul": {f16},
+    "xlogy": {f16},
+    "cdist": {f32, f64},
+    "linalg.matrix_norm": {f16},
+    "masked.normalize": {f16},
+    "masked.prod": {f16},
+    "masked.std": {f16},
+    "prod": {f16},
+    "lerp": {f16},
+    "masked.var": {f16},
+    "mean": {f16, f32, f64},
+    "std_mean": {f16},
+    "var_mean": {f16},
+    "scatter_reduce.mean": {f16, f32, f64},
+    "linalg.vector_norm": {f16},
+    "addcdiv": {f16, f64},
+    "argmax": {i32, i64},
+    "full": {b8},
+    "masked.mean": {b8},
+    "gather": {b8, f16, f32, f64, i32, i64},
+    "linalg.det": {f32},
+    "linspace": {f16, f32, f64, i32, i64},
+    "masked.logsumexp": {f16, f32, f64, b8},
+    "matmul": {f16, f32, f64},
+    "nn.functional._scaled_dot_product_attention": {f32, f64},
+    "nn.functional.adaptive_avg_pool1d": {f16},
+    "nn.functional.alpha_dropout": {f16, f32, f64},
+    "nn.functional.avg_pool1d": {f16, f32, f64},
+    "nn.functional.avg_pool3d": {f16},
+    "nn.functional.binary_cross_entropy": {f16},
+    "nn.functional.binary_cross_entropy_with_logits": {f16},
+    "nn.functional.conv2d": {f16},
+    "nn.functional.conv_transpose3d": {f32},
+    "nn.functional.cosine_embedding_loss": {f16},
+    "nn.functional.dropout2d": {f16, f32, f64},
+    "nn.functional.dropout3d": {f16, f32, f64},
+    "nn.functional.dropout": {f16, f32, f64},
+    "nn.functional.feature_alpha_dropout.with_train": {f16, f32, f64},
+    "nn.functional.fractional_max_pool2d": {f16, f32, f64},
+    "nn.functional.fractional_max_pool3d": {f16, f32, f64},
+    "nn.functional.mse_loss": {f16},
+    "nn.functional.max_pool2d": {f16, f32, f64},
+    "nn.functional.max_pool3d": {f16},
+    "nn.functional.group_norm": {f16},
+    "nn.functional.interpolate.area": {f16},
+    "nn.functional.hinge_embedding_loss": {f16},
+    "nn.functional.interpolate.bicubic": {f64},
+    "nn.functional.interpolate.bilinear": {f64},
+    "nn.functional.interpolate.nearest": {f16, f32, f64},
+    "nn.functional.interpolate.trilinear": {f16},
+    "nn.functional.kl_div": {f16},
+    "nn.functional.margin_ranking_loss": {f16},
+    "nn.functional.pad.reflect": {f16, f32, f64},
+    "nn.functional.pairwise_distance": {f16},
+    "nn.functional.poisson_nll_loss": {f16},
+    "nn.functional.upsample_bilinear": {f64},
+    "nn.functional.upsample_nearest": {f16, f32, f64},
+    "nn.functional.layer_norm": {f16, f32, f64},
+    "nn.functional.pdist": {f32, f64},
+    "bool": {b8, f16, f32, f64, i32, i64},
+    "byte": {b8, f16, f32, f64, i32, i64},
+    "char": {b8, f16, f32, f64, i32, i64},
+    "float": {b8, f16, f32, f64, i32, i64},
+    "half": {b8, f16, f32, f64, i32, i64},
+    "int": {b8, f16, f32, f64, i32, i64},
+    "bfloat16": {b8, f16, f32, f64, i32, i64},
+    "long": {b8, f16, f32, f64, i32, i64},
+    "short": {b8, f16, f32, f64, i32, i64},
+    "index_put": {f16, f32, f64},
+    "cat": {b8, f16, f32, f64, i32, i64},
+    "narrow": {b8, f16, f32, f64, i32, i64},
+    "native_layer_norm": {f16, f32, f64},
+    "new_zeros": {b8, f16, f32, f64, i32, i64},
+    "max_pool2d_with_indices_backward": {f16, f32, f64},
+    "signal.windows.bartlett": {f16, f32, f64},
+    "signal.windows.blackman": {f16, f32, f64},
+    "signal.windows.cosine": {f16, f32, f64},
+    "signal.windows.exponential": {f16, f32, f64},
+    "signal.windows.gaussian": {f16, f32, f64},
+    "signal.windows.general_cosine": {f16, f32, f64},
+    "signal.windows.general_hamming": {f16, f32, f64},
+    "signal.windows.hamming": {f16, f32, f64},
+    "signal.windows.hann": {f16, f32, f64},
+    "signal.windows.kaiser": {f16, f32, f64},
+    "tile": {b8, f16, f32, f64, i32, i64},
+    "unflatten": {b8, i32, i64},
 }
 
 
@@ -476,6 +681,12 @@ class TestInductorOpInfo(TestCase):
             op_name, set()
         ):
             test_expect = TestExpect.XFAILURE
+        elif (
+            dtype
+            in inductor_expected_failures_all_samples[device_type].get(op_name, set())
+            and ALL_SAMPLES
+        ):
+            test_expect = TestExpect.XFAILURE
         else:
             test_expect = TestExpect.SUCCESS
 
@@ -502,15 +713,10 @@ class TestInductorOpInfo(TestCase):
             and not dtype == torch.complex32
         )
         samples = op.sample_inputs(device, dtype, requires_grad=requires_grad)
-
-        if op_name not in inductor_all_samples and not ALL_SAMPLES:
-            if isinstance(samples, (list, tuple)):
-                samples = [samples[0]]
-            else:
-                samples = [next(samples)]
-
         try:
-            for sample_input in samples:
+            # keep a counter and assert in except that the counter is > 0 if the op, dtype, device is in the newly added list
+            # else error out saying "move this op to the other list since it now fails on even the first input"
+            for count, sample_input in enumerate(samples):
                 args = [sample_input.input] + list(sample_input.args)
                 kwargs = sample_input.kwargs
                 # UNCOMMENT TO DEBUG SEGFAULTS
@@ -552,8 +758,24 @@ class TestInductorOpInfo(TestCase):
 
         except Exception as e:
 
-            if test_expect is TestExpect.XFAILURE:
+            # This is prevalent on CI machines but it is not
+            # indicative of Inductor failure.
+            if e is OSError:
                 return
+
+            if test_expect is TestExpect.XFAILURE:
+                if (
+                    dtype
+                    in inductor_expected_failures_all_samples[device_type].get(
+                        op_name, set()
+                    )
+                    and count == 0
+                ):
+                    raise RuntimeError(
+                        f"expected to pass on at least one input {op_name}, {dtype}, {device_type}"
+                    )
+                else:
+                    return
 
             seen_failed[device_type].setdefault(op_name, set()).add(dtype)
 
