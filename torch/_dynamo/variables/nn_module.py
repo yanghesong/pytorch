@@ -214,9 +214,10 @@ class NNModuleVariable(VariableTracker):
                 # so restrict using __call__ only to lazy modules for now
                 if is_lazy:
                     fn = mod.__class__.__call__
+                    options["source"] = AttrSource(self.source, "__call__")
                 else:
                     fn = mod.__class__.forward
-
+                    options["source"] = AttrSource(self.source, "forward")
                 return tx.inline_user_function_return(
                     variables.UserFunctionVariable(fn, **options),
                     [self] + args,

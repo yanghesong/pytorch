@@ -809,7 +809,7 @@ class DefaultsTests(torch._dynamo.test_case.TestCase):
 
         # But with a change to the guarded default tensor, we do recompile
         with patch.object(
-            ModuleWithDefaultTensorArgsMethod.forward,
+            mod.m.forward.__func__,
             "__defaults__",
             (torch.ones((3, 4, 5)),),
         ):
@@ -818,7 +818,7 @@ class DefaultsTests(torch._dynamo.test_case.TestCase):
         self.assertEqual(cnts.op_count, 4)
 
         with patch.object(
-            ModuleWithDefaultTensorArgsMethod.forward,
+            mod.m.forward.__func__,
             "__kwdefaults__",
             {"kw_x": torch.ones((3, 4, 5))},
         ):
