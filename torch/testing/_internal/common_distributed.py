@@ -947,7 +947,7 @@ class MultiThreadedTestCase(TestCase):
             self.perThreadTearDown()
 
     def perThreadSetUp(self):
-        pass
+        super().setUp()  # TestCase.setUp() calls torch.manual_seed()
 
     def perThreadTearDown(self):
         pass
@@ -955,6 +955,10 @@ class MultiThreadedTestCase(TestCase):
     @property
     def world_size(self) -> int:
         raise RuntimeError("world size not implemented")
+
+    @property
+    def rank(self) -> int:
+        return c10d.get_rank()
 
 
 class SaveForwardInputsModule(nn.Module):
