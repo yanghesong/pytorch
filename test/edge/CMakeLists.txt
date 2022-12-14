@@ -1,0 +1,72 @@
+cmake_minimum_required(VERSION 3.1)
+
+set(TORCH_ROOT ${CMAKE_CURRENT_LIST_DIR}/../..)
+set(TEST_ROOT ${TORCH_ROOT}/test/edge)
+set(OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/out)
+
+# Generate unboxing kernels
+set(GEN_COMMAND
+        "${PYTHON_EXECUTABLE}" -m torchgen.gen_executorch
+        --source-path=${TEST_ROOT}
+        --install_dir=${OUTPUT_DIRECTORY}
+        --tags-path=${TORCH_ROOT}/aten/src/ATen/native/tags.yaml
+        --aten_yaml_path=${TORCH_ROOT}/aten/src/ATen/native/native_functions.yaml
+        --use_aten_lib
+        --op_selection_yaml_path=${TEST_ROOT}/selected_operators.yaml
+        )
+set(GEN_COMMAND_sources
+        ${OUTPUT_DIRECTORY}/RegisterCodegenUnboxedKernelsEverything.cpp
+        ${OUTPUT_DIRECTORY}/Functions.h
+        ${OUTPUT_DIRECTORY}/NativeFunctions.h
+        )
+message(STATUS "Generating sources for unboxing kernels ${GEN_COMMAND}")
+add_custom_command(
+        COMMENT "Generating sources"
+        OUTPUT ${GEN_COMMAND_sources}
+        COMMAND ${GEN_COMMAND}
+        DEPENDS
+        ${TORCH_ROOT}/aten/src/ATen/native/native_functions.yaml
+        ${TORCH_ROOT}/aten/src/ATen/native/tags.yaml
+        ${TEST_ROOT}/templates/Functions.h
+        ${TEST_ROOT}/templates/NativeFunctions.h
+        ${TEST_ROOT}/templates/RegisterCodegenUnboxedKernels.cpp
+        WORKING_DIRECTORY ${TORCH_ROOT}
+)
+add_custom_target(unbox_target DEPENDS ${GEN_COMMAND_sources})
+
+add_library(unbox_lib SHARED
+        ${GEN_COMMAND_sources}
+        ${TEST_ROOT}/operator_registry.cpp
+        )
+target_include_directories(unbox_lib PUBLIC ${TEST_ROOT} ${ATen_CPU_INCLUDE})
+target_link_libraries(unbox_lib PUBLIC torch_cpu)
+target_compile_definitions(unbox_lib PUBLIC USE_ATEN_LIB)
+
+add_executable(test_edge_op_registration
+        ${TEST_ROOT}/test_operator_registration.cpp
+        ${TEST_ROOT}/test_main.cpp
+        )
+
+target_compile_definitions(test_edge_op_registration PRIVATE USE_GTEST)
+
+set(TEST_DEPENDENCIES gtest unbox_lib)
+
+target_link_libraries(test_edge_op_registration PRIVATE
+  ${TEST_DEPENDENCIES}
+)
+if(CMAKE_CXX_COMPILER_ID MATCHES "AppleClang|Clang")
+  target_link_options(test_edge_op_registration PRIVATE
+          -Wl,-force_load
+          $<TARGET_FILE:unbox_lib>
+          )
+endif()
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+  target_link_options(test_edge_op_registration PRIVATE
+          -Wl,--no-as-needed
+          $<TARGET_FILE:unbox_lib>
+          -Wl,--as-needed
+          )
+endif()
+if(INSTALL_TEST)
+  install(TARGETS test_edge_op_registration DESTINATION bin)
+endif()
