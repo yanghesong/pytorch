@@ -14,6 +14,7 @@ from .eval_frame import (
 )
 from .external_utils import is_compiling
 from .utils import compilation_metrics, guard_failures, orig_code_map
+from . import debug
 
 __all__ = [
     "allow_in_graph",
