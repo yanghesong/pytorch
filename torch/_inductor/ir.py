@@ -2574,6 +2574,18 @@ class ExternKernel(InputsKernel):
         args.extend(map(repr, self.constant_args))
         return args
 
+    def cpp_wrapper_codegen_args(self):
+        args = [x.codegen_reference() for x in self.inputs]
+        args.extend(
+            map(
+                str,
+                self.cpp_constant_args
+                if hasattr(self, "cpp_constant_args")
+                else self.constant_args,
+            )
+        )
+        return args
+
     def codegen_kwargs(self):
         kwargs = []
         if self.kwargs:
@@ -3649,14 +3661,26 @@ class MKLPackedLinear(ExternKernelAlloc):
         layout,
         inputs,
         constant_args=(),
+        cpp_constant_args=(),
         kernel="torch.ops.mkl._mkl_linear",
     ):
         super().__init__(layout, inputs, constant_args)
         self.kernel = kernel
+        self.cpp_kernel = "at::_mkl_linear"
+        self.cpp_constant_args = cpp_constant_args
 
     def codegen(self, wrapper):
+        from torch._inductor.codegen.wrapper import CppWrapperCodeGen
+
+        if isinstance(wrapper, CppWrapperCodeGen):
+            args = self.cpp_wrapper_codegen_args()
+        else:
+            args = self.codegen_args()
+
         wrapper.writeline(
-            f"{self.get_name()} = {self.kernel}({', '.join(self.codegen_args())})"
+            wrapper.generate_mkl_packed_linear_code(
+                self.get_name(), self.kernel, self.cpp_kernel, args
+            )
         )
 
     @classmethod
@@ -3680,10 +3704,12 @@ class MKLPackedLinear(ExternKernelAlloc):
         x = cls.require_stride_order(x, req_stride_order)
         inputs = [x, packed_w, orig_w]
         constant_args = [batch_size]
+        cpp_constant_args = [batch_size]
         if bias is not None:
             inputs.append(bias)
         else:
             constant_args.insert(0, bias)
+            cpp_constant_args.insert(0, "at::Tensor()")
 
         return MKLPackedLinear(
             layout=FixedLayout(
@@ -3691,6 +3717,7 @@ class MKLPackedLinear(ExternKernelAlloc):
             ),
             inputs=inputs,
             constant_args=constant_args,
+            cpp_constant_args=cpp_constant_args,
             kernel=kernel,
         )
 
