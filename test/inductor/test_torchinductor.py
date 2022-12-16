@@ -5969,6 +5969,34 @@ if HAS_CUDA:
             self.assertEqual(arguments_that_are_divisible_by_16_in_kernel1, (0, 1))
             torch._dynamo.reset()
 
+        def test_optimize_indexing_dtype(self):
+            from torch._inductor.debug import DebugContext
+            from torch._inductor.virtualized import V
+
+            torch._dynamo.reset()
+
+            context = DebugContext()
+            with patch.object(
+                config.trace, "enabled", True
+            ), context, V.set_debug_handler(context):
+                assert context._path is not None
+
+                dir_name = "/".join(context._path.split("/")[:-1])
+                name = "model__0_inference_0.1/output_code.py"
+                full_name = os.path.join(dir_name, name)
+
+                @torch._dynamo.optimize("inductor")
+                def fn(x: torch.Tensor) -> torch.Tensor:
+                    return aten.upsample_bilinear2d.vec(x, None, True, [2.0, 2.0])
+
+                fn(torch.randn(2, 4, 16, 16).cuda())
+
+                with open(full_name, "r") as f:
+                    code = f.read()
+                    breakpoint()
+                    self.assertTrue("to(tl.int32)" in code)
+                    self.assertFalse("to(tl.int64)" in code)
+
 
 class ExprPrinterTests(TestCase):
     def test_print_pow(self):
