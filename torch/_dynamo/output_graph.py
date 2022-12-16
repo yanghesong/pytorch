@@ -58,7 +58,6 @@ from .variables.nn_module import NNModuleVariable
 from .variables.tensor import (
     DynamicShapeVariable,
     TensorVariable,
-    UnspecializedNumpyVariable,
     UnspecializedPythonVariable,
 )
 
@@ -236,9 +235,7 @@ class OutputGraph(fx.Tracer, Checkpointable[OutputGraphState]):
         self.should_exit = False
         self.random_values_var = None
         self.initial_random_state = ()
-        self.unspec_variable_map: Dict[
-            str, Union[UnspecializedNumpyVariable, UnspecializedPythonVariable]
-        ] = {}
+        self.unspec_variable_map: Dict[str, UnspecializedPythonVariable] = {}
         self.intermediary_symbols: Dict[sympy.Expr, None] = {}
 
         # Enables creating unique node names by tracking
@@ -509,10 +506,7 @@ class OutputGraph(fx.Tracer, Checkpointable[OutputGraphState]):
         if (
             stack_values
             and all(
-                not isinstance(
-                    v, (UnspecializedNumpyVariable, UnspecializedPythonVariable)
-                )
-                for v in stack_values
+                not isinstance(v, UnspecializedPythonVariable) for v in stack_values
             )
             and all(isinstance(x, TensorVariable) for x in stack_values)
             and len(set(stack_values)) == len(stack_values)
