@@ -459,6 +459,9 @@ An enum-like class for built-in communication hooks: ``ALLREDUCE`` and ``FP16_CO
             return reducer.get_grad_buckets(/* return_zero_tensors */ true);
           },
           py::call_guard<py::gil_scoped_release>())
+      .def("_set_grads_to_none", [](::c10d::Reducer& reducer) {
+          reducer.set_grads_to_none(true);
+      }, py::call_guard<py::gil_scoped_release>())
       .def(
           "_push_all_rebuilt_params",
           &::c10d::Reducer::push_rebuilt_params_for_all_indices,
@@ -495,6 +498,15 @@ An enum-like class for built-in communication hooks: ``ALLREDUCE`` and ``FP16_CO
             return std::make_shared<jit::PythonFutureWrapper>(fut);
           },
           py::call_guard<py::gil_scoped_release>())
+      .def(
+          "_run_allreduce_hook",
+          [](::c10d::Reducer& reducer, ::c10d::GradBucket& bucket)
+              -> std::shared_ptr<jit::PythonFutureWrapper> {
+                c10::intrusive_ptr<c10::ivalue::Future> fut =
+                reducer.run_allreduce_hook(bucket);
+                return std::make_shared<jit::PythonFutureWrapper>(fut);
+              },
+              py::call_guard<py::gil_scoped_release>())
       .def(
           "set_logger",
           [](::c10d::Reducer& reducer,
