@@ -431,7 +431,9 @@ class Function(_SingleLevelFunction):
                 'In order to use an autograd.Function with functorch transforms ',
                 '(vmap, grad, jvp, jacrev, ...), it must have a setup_context ',
                 'staticmethod.')
-        return custom_function_call(cls, *args, **kwargs)
+
+        return custom_function_call(
+            cls, getattr(cls, 'generate_vmap_rule', False), *args, **kwargs)
 
 def once_differentiable(fn):
 
