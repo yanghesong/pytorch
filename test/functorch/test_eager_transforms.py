@@ -31,7 +31,7 @@ from functorch import (
     grad, vjp, vmap, jacrev, jacfwd, grad_and_value, hessian,
     jvp, make_functional, make_functional_with_buffers,
     combine_state_for_ensemble, make_fx, functional_call,
-    params_and_buffers_no_grad_tracking
+    params_and_buffers_no_grad_tracking, combine_weights_for_ensemble
 )
 from torch._functorch.make_functional import (
     functional_init, functional_init_with_buffers
@@ -3335,7 +3335,8 @@ class TestExamplesCorrectness(TestCase):
 
         self.assertEqual(result, expected)
 
-    def test_ensemble_regression(self, device):
+    @parametrize('mechanism', ["make_functional", "functional_call"])
+    def test_ensemble_regression(self, device, mechanism):
         def make_spirals(n_samples, noise_std=0., rotations=1.):
             ts = torch.linspace(0, 1, n_samples)
             rs = ts ** 0.5
@@ -3368,7 +3369,7 @@ class TestExamplesCorrectness(TestCase):
 
         loss_fn = nn.NLLLoss()
 
-        func_model, weights = make_functional(MLPClassifier().to(device))
+        func_model, weights = _get_weights_and_functional_call(MLPClassifier().to(device), mechanism)
 
         def train_step_fn(use_transform, weights, batch, targets, lr=0.2):
             def compute_loss(weights, batch, targets):
@@ -3380,12 +3381,14 @@ class TestExamplesCorrectness(TestCase):
                 grad_weights, loss = grad_and_value(compute_loss)(weights, batch, targets)
             else:
                 loss = compute_loss(weights, batch, targets)
-                grad_weights = torch.autograd.grad(loss, weights)
+                list_weights = weights if mechanism == "make_functional" else list(weights.values())
+                grad_weights = torch.autograd.grad(loss, list_weights)
+                grad_weights = grad_weights if mechanism == "make_functional" else dict(
+                    zip(weights.keys(), grad_weights))
 
-            new_weights = []
-            with torch.no_grad():
-                for grad_weight, weight in zip(grad_weights, weights):
-                    new_weights.append(weight - grad_weight * lr)
+            new_weights = self._update_params(weights, grad_weights, lr, mechanism)
+            if mechanism != "make_functional":
+                new_weights = list(new_weights.values())
             # NB: return looks weird because torch.vmap must return Tensors
             return (loss, *new_weights)
 
@@ -3394,13 +3397,16 @@ class TestExamplesCorrectness(TestCase):
 
         def init_fn(num_models):
             models = tuple(MLPClassifier().to(device) for _ in range(num_models))
-            weights = tuple(make_functional(model)[1] for model in models)
-            weights = tuple(zip(*weights))
-            weights = tuple(torch.stack(shards).detach() for shards in weights)
-            return weights
+            if mechanism == "make_functional":
+                return combine_state_for_ensemble(models)[1]
+            else:
+                return combine_weights_for_ensemble(models)[0]
 
         def slice_weights(batched_weights, index):
-            return tuple(weight[index].detach().requires_grad_() for weight in batched_weights)
+            if mechanism == "make_functional":
+                return tuple(weight[index].detach().requires_grad_() for weight in batched_weights)
+            else:
+                return {k: weight[index].detach().requires_grad_() for k, weight in batched_weights.items()}
 
         batched_weights = init_fn(num_models=2)
         parallel_train_step_fn = vmap(partial(train_step_fn, True), in_dims=(0, None, None))
@@ -3420,7 +3426,8 @@ class TestExamplesCorrectness(TestCase):
         subtest(nn.AlphaDropout, 'AlphaDropout'),
         subtest(nn.FeatureAlphaDropout, 'FeatureAlphaDropout'),
     ])
-    def test_find_learning_rate_ensembling(self, device, dropout_layer):
+    @parametrize('mechanism', ["make_functional", "functional_call"])
+    def test_find_learning_rate_ensembling(self, device, dropout_layer, mechanism):
         # This example mimics what a user might do when trying to find the optimal learning rate. They would
         # want to run a bunch of models with the same behavior (including the same dropout!) and have them
         # each run with different learning rates. Specifically, this is an example of using same randomness with vmap
@@ -3447,7 +3454,7 @@ class TestExamplesCorrectness(TestCase):
 
         loss_fn = nn.NLLLoss()
 
-        func_model, weights = make_functional(MLPClassifier().to(device))
+        func_model, weights = _get_weights_and_functional_call(MLPClassifier().to(device), mechanism)
 
         def train_step_fn(weights, batch, targets, lr):
             def compute_loss(weights, batch, targets):
@@ -3456,10 +3463,9 @@ class TestExamplesCorrectness(TestCase):
                 return loss
 
             grad_weights, loss = grad_and_value(compute_loss)(weights, batch, targets)
-            new_weights = []
-            with torch.no_grad():
-                for grad_weight, weight in zip(grad_weights, weights):
-                    new_weights.append(weight - grad_weight * lr)
+            new_weights = self._update_params(weights, grad_weights, lr, mechanism)
+            if mechanism != "make_functional":
+                new_weights = list(new_weights.values())
             # NB: return looks weird because torch.vmap must return Tensors
             return (loss, *new_weights)
 
@@ -3469,10 +3475,10 @@ class TestExamplesCorrectness(TestCase):
         def init_fn(num_models):
             og_model = MLPClassifier().to(device)
             models = tuple(copy.deepcopy(og_model) for _ in range(num_models))  # have same initialization
-            weights = tuple(make_functional(model)[1] for model in models)
-            weights = tuple(zip(*weights))
-            weights = tuple(torch.stack(shards).detach() for shards in weights)
-            return weights
+            if mechanism == "make_functional":
+                return combine_state_for_ensemble(models)[1]
+            else:
+                return combine_weights_for_ensemble(models)[0]
 
         batched_weights = init_fn(num_models=2)
         parallel_train_step_fn = vmap(train_step_fn, in_dims=(0, None, None, 0), randomness="same")
