@@ -1903,6 +1903,12 @@ aot_autograd_failures = {
     # Given input size: (s0xs1x2). Calculated output size: ...
     skip('max_pool2d_with_indices_backward'),
 
+    # Worked with real but not with fake
+    xfail('cholesky_inverse'),
+    xfail('sgn'),
+    xfail('segment_reduce', 'lengths'),
+    xfail('nn.functional.embedding_bag'),
+
     # Misc
     xfail('to_sparse'),
     xfail('corrcoef'),
