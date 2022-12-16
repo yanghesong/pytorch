@@ -35,6 +35,7 @@ decompositions = get_decompositions(
         aten.embedding_dense_backward,
         aten.expand_as,
         aten.eye,
+        aten.fill,
         aten.flip,
         aten._fused_moving_avg_obs_fq_helper,
         aten.gelu,
@@ -112,6 +113,8 @@ decompositions = get_decompositions(
         aten.softplus,
         aten.softplus_backward,
         aten.bucketize,
+        aten.zero,
+        aten.zero_,
     ]
 )
 
@@ -502,17 +505,6 @@ def conj_physical(self):
 @register_decomposition([aten.lift, aten.detach_])
 def lift(self):
     return self
-
-
-@register_decomposition([aten.fill.Scalar])
-def fill_scalar(self, value):
-    return torch.full_like(self, value)
-
-
-@register_decomposition([aten.fill.Tensor])
-def fill_tensor(self, value: Tensor):
-    assert value.dim() == 0, "aten.fill.Tensor only supports 0-dimension value tensor"
-    return torch.full_like(self, value.item())
 
 
 @register_decomposition([aten.bernoulli.default])
