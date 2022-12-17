@@ -350,6 +350,9 @@ Tensor _sparse_compressed_tensor_unsafe(const Tensor& compressed_indices,
   }
   Layout layout_ = layout.value();
   AT_DISPATCH_ALL_SPARSE_COMPRESSED_LAYOUTS(layout_, "sparse_compressed_tensor_unsafe", [&]{});
+  if (at::globalContext().checkSparseTensorInvariants()) {
+    _validate_sparse_compressed_tensor_args_worker(compressed_indices, plain_indices, values, size, layout_);
+  }
   TensorOptions options = TensorOptions().dtype(dtype).layout(layout_).device(device).pinned_memory(pin_memory);
   SparseCsrTensor self = new_compressed_tensor(options);
   get_sparse_csr_impl(self)->set_member_tensors(compressed_indices, plain_indices, values, size);
@@ -367,6 +370,9 @@ Tensor _sparse_compressed_tensor_unsafe_template(const Tensor& compressed_indice
                                                  c10::optional<bool> pin_memory) {
   Layout layout_ = layout.value_or(required_layout);
   TORCH_CHECK(layout_ == required_layout, "sparse compressed layout must be ",required_layout, " but got ", layout_);
+  if (at::globalContext().checkSparseTensorInvariants()) {
+    _validate_sparse_compressed_tensor_args_worker(compressed_indices, plain_indices, values, size, layout_);
+  }
   TensorOptions options = TensorOptions().dtype(dtype).layout(layout_).device(device).pinned_memory(pin_memory);
   SparseCsrTensor self = new_compressed_tensor(options);
   get_sparse_csr_impl(self)->set_member_tensors(compressed_indices, plain_indices, values, size);
@@ -468,8 +474,9 @@ Tensor sparse_compressed_tensor(
   // See [Note: hacky wrapper removal for TensorOptions]
   TensorOptions options = TensorOptions().dtype(dtype).layout(layout_).device(device).pinned_memory(pin_memory);
 
-  _validate_sparse_compressed_tensor_args_worker(compressed_indices, plain_indices, values, size, layout_);
-
+  if (!at::globalContext().checkSparseTensorInvariants()) {
+    _validate_sparse_compressed_tensor_args_worker(compressed_indices, plain_indices, values, size, layout_);
+  } // otherwise arguments are validated in _sparse_compressed_tensor_unsafe
   return at::native::_sparse_compressed_tensor_unsafe(
       compressed_indices,
       plain_indices,
@@ -501,8 +508,9 @@ Tensor sparse_compressed_tensor(
   // See [Note: hacky wrapper removal for TensorOptions]
   TensorOptions options = TensorOptions().dtype(dtype).layout(layout_).device(device).pinned_memory(pin_memory);
 
-  _validate_sparse_compressed_tensor_args_worker(compressed_indices, plain_indices, values, size, layout_);
-
+  if (!at::globalContext().checkSparseTensorInvariants()) {
+    _validate_sparse_compressed_tensor_args_worker(compressed_indices, plain_indices, values, size, layout_);
+  } // otherwise arguments are validated in _sparse_compressed_tensor_unsafe
   return at::native::_sparse_compressed_tensor_unsafe(
       compressed_indices,
       plain_indices,
