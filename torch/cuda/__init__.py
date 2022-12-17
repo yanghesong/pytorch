@@ -70,6 +70,12 @@ if hasattr(torch._C, '_CudaDeviceProperties'):
 else:
     _CudaDeviceProperties = _dummy_type('_CudaDeviceProperties')  # type: ignore[assignment, misc]
 
+if hasattr(torch._C, '_cuda_DeviceGuard'):
+    _DeviceGuard = torch._C._cuda_DeviceGuard
+else:
+    _DeviceGuard = _dummy_type('_DeviceGuard')  # type: ignore[assignment, misc]
+
+
 # Global variables dynamically populated by native code
 has_magma: bool = False
 has_half: bool = False
@@ -280,7 +286,7 @@ def check_error(res: int) -> None:
         raise CudaError(res)
 
 
-class device(object):
+class device(_DeviceGuard):
     r"""Context-manager that changes the selected device.
 
     Args:
@@ -289,22 +295,8 @@ class device(object):
     """
 
     def __init__(self, device: Any):
-        self.idx = _get_device_index(device, optional=True)
-        self.prev_idx = -1
-
-    def __enter__(self):
-        if self.idx == -1:
-            return
-        self.prev_idx = torch.cuda.current_device()
-        if self.prev_idx != self.idx:
-            torch.cuda.set_device(self.idx)
-        if not torch.jit.is_scripting():
-            _lazy_init()
-
-    def __exit__(self, type: Any, value: Any, traceback: Any):
-        if self.prev_idx != self.idx:
-            torch.cuda.set_device(self.prev_idx)
-        return False
+        idx = _get_device_index(device, optional=True)
+        super().__init__(idx)
 
 
 class device_of(device):
