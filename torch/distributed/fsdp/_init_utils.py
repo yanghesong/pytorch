@@ -18,6 +18,8 @@ from typing import (
 
 import torch
 import torch.distributed as dist
+import torch.distributed.fsdp._composable_utils as composable_utils
+import torch.distributed.fsdp._exec_order_utils as exec_order_utils
 import torch.distributed.fsdp.fully_sharded_data_parallel as fsdp_file
 import torch.nn as nn
 from torch.distributed.algorithms._comm_hooks import default_hooks
@@ -29,7 +31,6 @@ from torch.distributed.fsdp._common_utils import (
     clean_tensor_name,
     TrainingState,
 )
-from torch.distributed.fsdp._exec_order_utils import _ExecOrderData
 from torch.distributed.fsdp._limiter_utils import _FreeEventQueue
 from torch.distributed.fsdp._wrap_utils import _get_submodule_to_states
 from torch.distributed.fsdp.api import (
@@ -303,7 +304,7 @@ def _init_core_state(
     state._stream_to_name = _stream_to_name
     state._free_event_queue = _FreeEventQueue()
     state._debug_level = dist.get_debug_level()
-    state._exec_order_data = _ExecOrderData(
+    state._exec_order_data = exec_order_utils._ExecOrderData(
         state._debug_level,
         backward_prefetch_limit,
         forward_prefetch_limit,
@@ -520,8 +521,13 @@ def _get_ignored_modules(
     subtrees as a :class:`set`. Nested FSDP instances are excluded, but their
     already-computed ignored modules are included.
     """
+    # Always include modules that cannot compose with `fully_shard`
+    ignored_modules: Set[nn.Module] = set()
+    for module in root_module.modules():
+        if not composable_utils._composable(module):
+            ignored_modules.add(module)
     if _ignored_modules is None:
-        return set()
+        return ignored_modules
     msg_prefix = "`ignored_modules` should be an iterable of `torch.nn.Module`s "
     try:
         ignored_root_modules = set(_ignored_modules)
@@ -533,7 +539,7 @@ def _get_ignored_modules(
         if isinstance(module, fsdp_file.FullyShardedDataParallel):
             raise ValueError("`ignored_modules` should not include FSDP modules")
     # Include child modules and exclude nested FSDP modules themselves
-    ignored_modules = set(
+    ignored_modules.update(
         child
         for module in ignored_root_modules
         for child in module.modules()
